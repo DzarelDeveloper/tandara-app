@@ -54,6 +54,8 @@ fun ParentProfileScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val colors = TandaraTheme.colors
+    val initials = uiState.currentParent?.name?.trim()?.split(Regex("\\s+"))
+        ?.take(2)?.mapNotNull { it.firstOrNull()?.uppercase() }?.joinToString("")?.ifBlank { "?" } ?: "?"
 
     BackHandler { onBackClick() }
 
@@ -99,7 +101,7 @@ fun ParentProfileScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "BS",
+                            text = initials,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = colors.primary
@@ -155,17 +157,17 @@ fun ParentProfileScreen(
                     HorizontalDivider(color = colors.divider)
                     ProfileReadOnlyRow(
                         label = "Username",
-                        value = "budi.santoso"
+                        value = uiState.username.ifBlank { "Tidak tersedia" }
                     )
                     HorizontalDivider(color = colors.divider)
                     ProfileReadOnlyRow(
                         label = "Nomor Telepon",
-                        value = uiState.maskedPhoneNumber.ifEmpty { "0812••••7890" }
+                        value = uiState.maskedPhoneNumber.ifEmpty { "Tidak tersedia" }
                     )
                     HorizontalDivider(color = colors.divider)
                     ProfileReadOnlyRow(
                         label = "Sekolah",
-                        value = "SMK Taman Harapan"
+                        value = "Dikelola sekolah"
                     )
                     HorizontalDivider(color = colors.divider)
                     Row(
@@ -182,7 +184,7 @@ fun ParentProfileScreen(
                             )
                         )
                         TandaraStatusBadge(
-                            text = "Aktif",
+                            text = "Sesi tersimpan",
                             variant = StatusVariant.SUCCESS,
                             showDot = true
                         )
@@ -231,7 +233,7 @@ fun ParentProfileScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Hubungi Admin IT SMK Taman Harapan jika terdapat data identitas yang perlu diperbarui.",
+                            text = "Hubungi Admin IT sekolah jika terdapat data identitas yang perlu diperbarui.",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = colors.textSecondary,
                                 lineHeight = 16.sp

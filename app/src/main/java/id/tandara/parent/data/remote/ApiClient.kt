@@ -3,14 +3,14 @@ package id.tandara.parent.data.remote
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import id.tandara.parent.core.network.NetworkConfig
-import id.tandara.parent.data.session.SessionManager
+import id.tandara.parent.data.session.SessionStore
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 
-class ApiClient(sessionManager: SessionManager) {
+class ApiClient(sessionManager: SessionStore) {
     private val moshi: Moshi by lazy {
         Moshi.Builder()
             .add(KotlinJsonAdapterFactory())

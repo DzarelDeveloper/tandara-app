@@ -72,6 +72,7 @@ import id.tandara.parent.core.designsystem.WarningAmber
 import id.tandara.parent.domain.model.AttendanceRecord
 import id.tandara.parent.domain.model.AttendanceStatus
 import id.tandara.parent.ui.components.TandaraBrandTopAppBar
+import id.tandara.parent.ui.components.ConnectionStateBanner
 
 /**
  * Reports Screen (UI/UX V3).
@@ -205,6 +206,7 @@ fun ReportsScreen(
                 .padding(bottom = 36.dp)
                 .testTag("reports_screen_content")
         ) {
+            ConnectionStateBanner(isOffline = uiState.isOffline, lastUpdatedAt = uiState.lastUpdatedAt)
             Spacer(modifier = Modifier.height(14.dp))
 
             // Screen Header + Student Context (Fixed single student, NO dropdown)
@@ -432,7 +434,11 @@ fun ReportsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Belum ada riwayat presensi pada periode ini.",
+                        text = if (uiState.errorMessage.isNullOrBlank()) {
+                            "Belum ada riwayat presensi pada periode ini."
+                        } else {
+                            "Data riwayat belum tersedia saat ini."
+                        },
                         fontSize = 13.5.sp,
                         color = SecondaryText
                     )

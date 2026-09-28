@@ -27,7 +27,7 @@ Attendance Data
 ↓
 Tandara Parent
 
-Saat ini, aplikasi Android masih menggunakan data lokal/mock untuk preview UI dan alur login/session. Integrasi dengan backend nyata belum diaktifkan di repo ini.
+Autentikasi Parent, data siswa, kehadiran, laporan, pengajuan izin, notifikasi, dan pembaruan WebSocket menggunakan backend Tandara. Cache Room mendukung pembacaan data terakhir saat offline; data cache selalu ditandai sebagai data lama dan backend tetap menjadi sumber kebenaran.
 
 ## Aturan Produk
 
@@ -43,7 +43,7 @@ Repo Android saat ini tidak mengimplementasikan penguatan otorisasi yang bersifa
 
 ## Fitur
 
-### Fitur saat ini / prototype
+### Fitur yang berjalan
 
 Aplikasi yang ada saat ini mencakup beberapa layar dan alur UI sebagai prototype demo:
 
@@ -62,20 +62,11 @@ Aplikasi yang ada saat ini mencakup beberapa layar dan alur UI sebagai prototype
 - Greeting dan format tanggal dalam Bahasa Indonesia
 - Persistensi tingkat onboarding, tema, dan status sesi menggunakan DataStore
 
-Catatan penting: data kehadiran dan sesi login saat ini masih dapat bersumber dari mock/local state. Fitur yang terlihat belum otomatis merepresentasikan sistem backend produksi.
+Ketersediaan endpoint dan kebijakan backend menentukan data yang dapat ditampilkan. Aplikasi tidak membuat data bisnis contoh saat koneksi gagal.
 
-### Fitur yang direncanakan setelah integrasi backend
+### Fitur lanjutan
 
-Fitur berikut merupakan target integrasi mendatang dan belum menjadi sumber data aktif di repo saat ini:
-
-- Autentikasi orang tua yang benar-benar terhubung ke backend
-- Pengambilan data profil parent dari server
-- Data siswa yang ditugaskan sesuai akun authenticated parent
-- Rekap kehadiran yang real-time dan berbasis server
-- Riwayat izin yang tersimpan di backend
-- Notifikasi yang diambil dari sumber data server
-- WebSocket untuk pembaruan realtime attendance
-- Integrasi push notification di masa depan
+- Push notification tetap belum diterapkan; aplikasi merekonsiliasi peristiwa yang terlewat melalui REST saat kembali online.
 
 ## Alur Aplikasi
 
@@ -138,11 +129,10 @@ Tidak ada screenshot produk yang ditemukan di repository ini yang layak dipakai 
 - Retrofit
 - OkHttp
 - Moshi
-- Room (dideklarasikan, namun belum aktif digunakan sebagai database yang benar-benar terhubung)
+- Room (offline read cache untuk data Parent)
 - Coil (tersedia, tetapi tampaknya belum menjadi sumber gambar utama di runtime)
-- Firebase AI / App Check scaffolding yang masih belum dihubungkan ke fitur yang aktif
 
-Catatan: Retrofit, OkHttp, dan Moshi ada di project untuk integrasi backend masa depan, tetapi kode aktif saat ini tetap mengandalkan repo lokal/mock. Mereka belum menjadi transport layer yang sebenarnya untuk aplikasi yang berjalan.
+Retrofit dan OkHttp menangani REST serta WebSocket; cache Room hanya menyimpan hasil sinkronisasi untuk dibaca saat offline dan bukan sumber data otoritatif.
 
 ## Arsitektur
 
@@ -152,12 +142,12 @@ Arsitektur saat ini bersifat ringan dan cocok untuk prototype UI:
 flowchart TD
     A[Compose UI] --> B[ViewModel / StateFlow]
     B --> C[Repository Interface]
-    C --> D[Mock Repository]
+    C --> D[Repository REST + Room cache]
 ```
 
 Interaksi app saat ini dilakukan melalui `DefaultAppContainer` yang menginisialisasi repository dan `SessionManager` secara manual. Tidak ada dependency injection framework seperti Hilt/Koin dalam repo ini.
 
-### Target Integration
+### Integrasi aktif
 
 ```mermaid
 flowchart TD
@@ -167,7 +157,7 @@ flowchart TD
     D --> E[Tandara FastAPI Backend]
 ```
 
-Diagram di bawah ini merupakan target integrasi yang masih direncanakan; bukan representasi dari koneksi yang sudah aktif di aplikasi saat ini.
+REST dan WebSocket menggunakan API Tandara; koneksi memakai URL yang dikonfigurasi saat build/run.
 
 ## Ekosistem Tandara
 
@@ -252,20 +242,20 @@ Build debug dijalankan dengan `./gradlew assembleDebug`; APK dihasilkan di `app/
 
 ## Status Integrasi Backend
 
-Status saat ini sesuai dengan audit kode yang ada:
+Status aplikasi saat ini:
 
 | Komponen | Status |
 |---|---|
 | Android UI | Implemented |
 | Local preferences | Implemented |
-| Mock repository | Implemented |
-| REST backend | Not Connected |
-| Realtime WebSocket | Not Connected |
-| FCM | Not Implemented |
+| REST backend Parent | Implemented |
+| Room offline read cache | Implemented |
+| Parent WebSocket | Implemented |
+| FCM / push notification | Not Implemented |
 
-Status ini mengacu pada repository saat ini: backend belum terhubung, autentikasi parent nyata belum aktif, REST tidak dihubungkan, dan realtime belum ditambahkan.
+Offline/reconnect behavior remains subject to device testing against a reachable Tandara backend; cached records are not authoritative.
 
-## Integrasi Backend yang Direncanakan
+## Alur Backend Aktif
 
 Konsep integrasi yang diharapkan adalah:
 
@@ -278,7 +268,7 @@ flowchart TD
     D --> E[Tandara Database]
 ```
 
-Saat ini, semua kontrak API dan skema WebSocket tetap harus diverifikasi terhadap backend nyata sebelum dapat dipakai di aplikasi. Dokumen yang relevan dapat dilihat di `docs/PARENT_BACKEND_INTEGRATION_PLAN.md`.
+Rincian endpoint aktif ada di `docs/backend-integration-map.md`. Offline/reconnect behavior masih menunggu validasi fisik pada perangkat Vivo dengan backend LAN yang berjalan.
 
 ## Keamanan & Privasi
 
@@ -310,10 +300,12 @@ app/src/main/java/id/tandara/parent/
 │   ├── common/          Utility, app container, permission, helper
 │   ├── designsystem/    Semantic color, theme, style token
 │   ├── navigation/      Routes dan NavHost Compose
-│   └── network/         Wrapper hasil API, konfigurasi jaringan yang belum aktif
+│   ├── network/         Wrapper hasil API dan observer konektivitas
 ├── data/
-│   ├── remote/          Retrofit client, DTO, service scaffolding
-│   ├── repository/      Mock repository aktif dan local service
+│   ├── local/           Room cache untuk data hasil sinkronisasi
+│   ├── remote/          Retrofit client, DTO, REST services
+│   ├── realtime/        Parent WebSocket dan reconnect
+│   ├── repository/      Repository backend dan cache
 │   └── session/         Preferences DataStore session/theme/onboarding
 ├── domain/
 │   ├── model/           Model domain parent, student, attendance, leave
@@ -334,15 +326,16 @@ app/src/main/java/id/tandara/parent/
 - [x] Fondasi UI Android parent
 - [x] First-run onboarding
 - [x] Sistem tema
-- [x] Dashboard mock parent
+- [x] Dashboard Parent berbasis backend
 - [x] Stabilisasi build/toolchain
 - [x] Identitas Android dan USB dev launcher
-- [ ] Autentikasi parent nyata
-- [ ] Integrasi REST backend
-- [ ] Integrasi realtime attendance
-- [ ] Integrasi leave request
-- [ ] Notifikasi persisten
-- [ ] WebSocket realtime
+- [x] Autentikasi parent nyata
+- [x] Integrasi REST backend
+- [x] Integrasi realtime Parent WebSocket
+- [ ] Offline/reconnect physical-device validation
+- [x] Integrasi leave request
+- [x] Notifikasi REST persisten
+- [x] WebSocket realtime
 - [ ] Push notification background
 
 Checklist di atas mencerminkan status yang dapat didukung oleh kode dan dokumen yang ada. Belum ada tanggal rilis yang ditetapkan.
@@ -376,7 +369,7 @@ Belum ada file LICENSE yang ditemukan di repository ini. Lisensi proyek belum di
 
 ## Catatan Akhir
 
-Proyek ini adalah prototype Android yang fokus pada pengalaman orang tua dalam ekosistem Tandara. UI, alur, tema, dan session state sudah dibangun dengan pendekatan Compose dan DataStore, tetapi integrasi backend, autentikasi nyata, dan data live belum aktif. README ini disusun berdasarkan audit kode yang sebenarnya, bukan asumsi dari backend yang belum ada.
+Proyek ini adalah aplikasi Android Parent untuk ekosistem Tandara. UI dibangun dengan Compose; sesi disimpan aman, data backend direkonsiliasi melalui REST/WebSocket, dan cache lokal hanya menyediakan pembacaan terakhir saat offline. Status kesiapan rilis publik tetap berbeda dari keberhasilan integrasi teknis.
 # Android ↔ Local Backend Development
 
 The laptop and physical Android phone must be connected to the same trusted LAN. Determine the laptop's LAN IPv4 address (for example with `ip -4 addr`; do not use `localhost` or `127.0.0.1` on the phone).
@@ -396,4 +389,4 @@ This binds FastAPI to `0.0.0.0:8000` for the local network; it does not configur
 
 Alternatively set `TANDARA_API_BASE_URL` in the environment or pass it as the Gradle property `-PTANDARA_API_BASE_URL=...`. Debug builds allow local cleartext HTTP; release builds do not opt into cleartext. Log in with a Parent username/password provisioned by Admin IT. Never place a real password or JWT in project files.
 
-The Phase 1 integration uses real parent identity and the one assigned student to validate the session. Attendance, reports, leave, and notifications are still the next migration phase and remain mock-backed in Android.
+The app authenticates the Parent and reads assigned-student, attendance, report, leave, and notification data from the backend. Cached responses remain explicitly stale until REST reconciliation succeeds; FCM/push is not implemented.

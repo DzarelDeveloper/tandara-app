@@ -15,7 +15,9 @@ data class ReportsUiState(
     val isDownloadAvailable: Boolean = false,
     val showDownloadInfoDialog: Boolean = false,
     val errorMessage: String? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val isOffline: Boolean = false,
+    val lastUpdatedAt: Long? = null
 ) {
     val selectedStudent: Student? get() = currentStudent
     val linkedStudents: List<Student> get() = currentStudent?.let { listOf(it) } ?: emptyList()

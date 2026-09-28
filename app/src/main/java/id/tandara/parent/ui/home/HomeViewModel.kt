@@ -43,14 +43,26 @@ class HomeViewModel(
     init {
         observeParentSession()
         observeRealtimeEvents()
+        observeRecoveryEvents()
         loadHomeData()
+    }
+
+    private fun observeRecoveryEvents() {
+        viewModelScope.launch {
+            realtimeCoordinator.networkConnected.collect { connected ->
+                if (!connected) _uiState.update { it.copy(isOffline = true) }
+            }
+        }
+        viewModelScope.launch {
+            realtimeCoordinator.refreshEvents.collect { loadHomeData() }
+        }
     }
 
     fun loadHomeData() {
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
-                    isLoading = true,
+                    isLoading = it.currentStudent == null,
                     greeting = computeDynamicGreeting(),
                     formattedDate = computeFormattedDate(),
                     monthYearText = computeMonthYearText()
@@ -70,19 +82,27 @@ class HomeViewModel(
                 val notifs = (notifRes as? ApiResult.Success)?.data ?: emptyList()
                 val unreadCountRes = parentRepository.getUnreadNotificationCount()
                 val unreadCount = (unreadCountRes as? ApiResult.Success)?.data ?: 0
+                val successful = listOf(todayAttRes, summaryRes, notifRes, unreadCountRes).filterIsInstance<ApiResult.Success<*>>()
+                val isOffline = studentResult.isStale || successful.any { it.isStale } ||
+                    listOf(todayAttRes, summaryRes, notifRes, unreadCountRes).any { it is ApiResult.BackendUnavailable }
+                val lastUpdated = successful.mapNotNull { it.lastUpdatedAt }.minOrNull()
 
                 _uiState.update {
                     it.copy(
                         currentStudent = student,
                         todayAttendance = todayAtt,
+                        todayAttendanceAvailable = todayAttRes is ApiResult.Success,
                         monthlySummary = summary,
                         notifications = dedupeNotifications(notifs),
                         unreadNotificationCount = unreadCount,
+                        isOffline = isOffline,
+                        lastUpdatedAt = lastUpdated,
                         isLoading = false
                     )
                 }
             } else {
-                _uiState.update { it.copy(isLoading = false) }
+                _uiState.update { it.copy(isLoading = false, isOffline = studentResult is ApiResult.BackendUnavailable,
+                    snackbarMessage = "Tidak dapat memuat data. Hubungkan perangkat ke jaringan Tandara dan coba lagi.") }
             }
         }
     }

@@ -1,6 +1,5 @@
 {
   "name": "Tandara",
   "description": "Aplikasi kehadiran siswa berbasis pengenalan wajah untuk orang tua murid oleh Tim Kena Scan.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "requestFramePermissions": []
 }

@@ -17,6 +17,7 @@ data class HomeUiState(
     val monthYearText: String = "",
     val currentStudent: Student? = null,
     val todayAttendance: AttendanceRecord? = null,
+    val todayAttendanceAvailable: Boolean = false,
     val monthlySummary: AttendanceSummary? = null,
     val notifications: List<ParentNotification> = emptyList(),
     val unreadNotificationCount: Int = 0,
@@ -24,6 +25,7 @@ data class HomeUiState(
     val showNotificationSheet: Boolean = false,
     val showStudentDetail: Boolean = false,
     val isOffline: Boolean = false,
+    val lastUpdatedAt: Long? = null,
     val realtimeBannerMessage: String? = null,
     val showRealtimeBanner: Boolean = false,
     val snackbarMessage: String? = null

@@ -144,7 +144,7 @@ fun HomeScreen(
                 .testTag("home_screen_content")
         ) {
             // Offline Banner if applicable
-            ConnectionStateBanner(isOffline = uiState.isOffline)
+            ConnectionStateBanner(isOffline = uiState.isOffline, lastUpdatedAt = uiState.lastUpdatedAt)
 
             // Realtime Attendance In-App Banner
             RealtimeAttendanceBanner(
@@ -221,6 +221,7 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     val todayStatusText = when {
+                        !uiState.todayAttendanceAvailable -> "Data presensi belum tersedia"
                         !hasRecordedAttendance -> "Belum ada presensi"
                         todayAttendance.status == AttendanceStatus.PRESENT -> "Sudah tiba di sekolah"
                         todayAttendance.status == AttendanceStatus.LATE -> "Terlambat masuk"
@@ -323,14 +324,14 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (todayAttendance?.checkInTime != null) "${todayAttendance.checkInTime} WIB" else "Belum tercatat",
+                                text = if (todayAttendance?.checkInTime != null) "${todayAttendance.checkInTime} WIB" else if (uiState.todayAttendanceAvailable) "Belum tercatat" else "Belum tersedia",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (todayAttendance?.checkInTime != null) PrimaryText else SecondaryText
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = todayAttendance?.punctualityLabel ?: "Belum tercatat",
+                                text = todayAttendance?.punctualityLabel ?: if (uiState.todayAttendanceAvailable) "Belum tercatat" else "Belum tersedia",
                                 fontSize = 11.5.sp,
                                 color = if (todayAttendance?.punctualityLabel != null) SuccessGreen else SecondaryText
                             )
@@ -352,14 +353,14 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (todayAttendance?.checkOutTime != null) "${todayAttendance.checkOutTime} WIB" else "Belum tercatat",
+                                text = if (todayAttendance?.checkOutTime != null) "${todayAttendance.checkOutTime} WIB" else if (uiState.todayAttendanceAvailable) "Belum tercatat" else "Belum tersedia",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (todayAttendance?.checkOutTime != null) PrimaryText else SecondaryText
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (todayAttendance?.checkOutTime != null) "Selesai" else "Belum tercatat",
+                                text = if (todayAttendance?.checkOutTime != null) "Selesai" else if (uiState.todayAttendanceAvailable) "Belum tercatat" else "Belum tersedia",
                                 fontSize = 11.5.sp,
                                 color = if (todayAttendance?.checkOutTime != null) SuccessGreen else SecondaryText
                             )
@@ -382,7 +383,11 @@ fun HomeScreen(
 
                     if (todayAttendance == null) {
                         Text(
-                            text = "Belum ada log presensi untuk hari ini.",
+                            text = if (uiState.todayAttendanceAvailable) {
+                                "Belum ada log presensi untuk hari ini."
+                            } else {
+                                "Data presensi hari ini belum dapat dimuat."
+                            },
                             fontSize = 12.5.sp,
                             color = SecondaryText
                         )
@@ -594,13 +599,13 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        SummaryColumnItem(count = (uiState.monthlySummary?.presentCount ?: 0).toString(), label = "Hadir", countColor = SuccessGreen)
+                        SummaryColumnItem(count = uiState.monthlySummary?.presentCount?.toString() ?: "—", label = "Hadir", countColor = SuccessGreen)
                         VerticalDivider(color = DividerColor, modifier = Modifier.height(36.dp))
-                        SummaryColumnItem(count = (uiState.monthlySummary?.lateCount ?: 0).toString(), label = "Terlambat", countColor = WarningAmber)
+                        SummaryColumnItem(count = uiState.monthlySummary?.lateCount?.toString() ?: "—", label = "Terlambat", countColor = WarningAmber)
                         VerticalDivider(color = DividerColor, modifier = Modifier.height(36.dp))
-                        SummaryColumnItem(count = (uiState.monthlySummary?.permissionCount ?: 0).toString(), label = "Izin", countColor = AccentBlue)
+                        SummaryColumnItem(count = uiState.monthlySummary?.permissionCount?.toString() ?: "—", label = "Izin", countColor = AccentBlue)
                         VerticalDivider(color = DividerColor, modifier = Modifier.height(36.dp))
-                        SummaryColumnItem(count = (uiState.monthlySummary?.unexcusedCount ?: 0).toString(), label = "Alfa", countColor = SecondaryText)
+                        SummaryColumnItem(count = uiState.monthlySummary?.unexcusedCount?.toString() ?: "—", label = "Alfa", countColor = SecondaryText)
                     }
                 }
             }

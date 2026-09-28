@@ -407,7 +407,7 @@ private fun OnboardingAttendanceVisual() {
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Alya Putri",
+                                text = "Siswa",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = colors.textPrimary
@@ -540,7 +540,7 @@ private fun OnboardingRealtimeVisual() {
                         )
                         Spacer(modifier = Modifier.height(3.dp))
                         Text(
-                            text = "Alya Putri telah melakukan presensi di gerbang SMK Taman Harapan.",
+                            text = "Informasi presensi akan muncul setelah tercatat oleh sekolah.",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = colors.textSecondary,
                                 lineHeight = 16.sp
@@ -548,7 +548,7 @@ private fun OnboardingRealtimeVisual() {
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Waktu: 06:47:18 WIB • Verifikasi Valid",
+                            text = "Waktu ditampilkan setelah data tersinkron.",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
                                 color = colors.primary

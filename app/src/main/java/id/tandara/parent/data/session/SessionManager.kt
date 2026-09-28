@@ -20,13 +20,32 @@ data class SessionUser(
     val phoneNumber: String = "",
     val username: String = "",
     val role: String = "PARENT",
+    val parentId: String = "",
     val studentId: String = "",
     val studentName: String = "",
     val studentNis: String = "",
     val studentClass: String = ""
 )
 
-class SessionManager(private val context: Context) {
+interface SessionStore {
+    val sessionFlow: Flow<SessionUser>
+    fun getAccessToken(): String?
+    suspend fun saveSession(
+        accessToken: String,
+        parentId: String,
+        displayName: String,
+        phoneNumber: String,
+        username: String,
+        role: String,
+        studentId: String,
+        studentName: String,
+        studentNis: String,
+        studentClass: String
+    )
+    suspend fun clearSession()
+}
+
+class SessionManager(private val context: Context) : SessionStore {
 
     companion object {
         private val KEY_IS_AUTHENTICATED = booleanPreferencesKey("is_authenticated")
@@ -34,6 +53,7 @@ class SessionManager(private val context: Context) {
         private val KEY_PHONE_NUMBER = stringPreferencesKey("phone_number")
         private val KEY_USERNAME = stringPreferencesKey("username")
         private val KEY_ROLE = stringPreferencesKey("role")
+        private val KEY_PARENT_ID = stringPreferencesKey("parent_id")
         private val KEY_STUDENT_ID = stringPreferencesKey("student_id")
         private val KEY_STUDENT_NAME = stringPreferencesKey("student_name")
         private val KEY_STUDENT_NIS = stringPreferencesKey("student_nis")
@@ -51,7 +71,7 @@ class SessionManager(private val context: Context) {
         EncryptedSharedPreferences.create(context, SECURE_PREFS, key, EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV, EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
     }
 
-    val sessionFlow: Flow<SessionUser> = context.dataStore.data.map { prefs ->
+    override val sessionFlow: Flow<SessionUser> = context.dataStore.data.map { prefs ->
         val isAuth = prefs[KEY_IS_AUTHENTICATED] ?: false
         val name = prefs[KEY_DISPLAY_NAME] ?: ""
         val phone = prefs[KEY_PHONE_NUMBER] ?: ""
@@ -63,6 +83,7 @@ class SessionManager(private val context: Context) {
             phoneNumber = phone,
             username = username,
             role = role,
+            parentId = prefs[KEY_PARENT_ID] ?: username,
             studentId = prefs[KEY_STUDENT_ID] ?: "",
             studentName = prefs[KEY_STUDENT_NAME] ?: "",
             studentNis = prefs[KEY_STUDENT_NIS] ?: "",
@@ -94,7 +115,7 @@ class SessionManager(private val context: Context) {
         }
     }
 
-    suspend fun saveSession(accessToken: String, displayName: String, phoneNumber: String, username: String, role: String, studentId: String, studentName: String, studentNis: String, studentClass: String) {
+    override suspend fun saveSession(accessToken: String, parentId: String, displayName: String, phoneNumber: String, username: String, role: String, studentId: String, studentName: String, studentNis: String, studentClass: String) {
         securePrefs.edit().putString(KEY_ACCESS_TOKEN, accessToken).apply()
         context.dataStore.edit { prefs ->
             prefs[KEY_IS_AUTHENTICATED] = true
@@ -102,6 +123,7 @@ class SessionManager(private val context: Context) {
             prefs[KEY_PHONE_NUMBER] = phoneNumber
             prefs[KEY_USERNAME] = username
             prefs[KEY_ROLE] = role
+            prefs[KEY_PARENT_ID] = parentId
             prefs[KEY_STUDENT_ID] = studentId
             prefs[KEY_STUDENT_NAME] = studentName
             prefs[KEY_STUDENT_NIS] = studentNis
@@ -109,7 +131,7 @@ class SessionManager(private val context: Context) {
         }
     }
 
-    suspend fun clearSession() {
+    override suspend fun clearSession() {
         securePrefs.edit().remove(KEY_ACCESS_TOKEN).apply()
         context.dataStore.edit { prefs ->
             prefs.remove(KEY_IS_AUTHENTICATED)
@@ -117,6 +139,7 @@ class SessionManager(private val context: Context) {
             prefs.remove(KEY_PHONE_NUMBER)
             prefs.remove(KEY_USERNAME)
             prefs.remove(KEY_ROLE)
+            prefs.remove(KEY_PARENT_ID)
             prefs.remove(KEY_STUDENT_ID)
             prefs.remove(KEY_STUDENT_NAME)
             prefs.remove(KEY_STUDENT_NIS)
@@ -125,7 +148,7 @@ class SessionManager(private val context: Context) {
         }
     }
 
-    fun getAccessToken(): String? = securePrefs.getString(KEY_ACCESS_TOKEN, null)
+    override fun getAccessToken(): String? = securePrefs.getString(KEY_ACCESS_TOKEN, null)
 
     suspend fun setNotificationsEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->

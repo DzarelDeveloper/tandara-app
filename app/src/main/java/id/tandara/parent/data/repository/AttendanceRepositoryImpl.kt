@@ -2,6 +2,8 @@ package id.tandara.parent.data.repository
 
 import id.tandara.parent.core.network.ApiResult
 import id.tandara.parent.data.remote.AttendanceApiService
+import id.tandara.parent.data.local.LocalCacheStore
+import id.tandara.parent.data.session.SessionStore
 import id.tandara.parent.data.remote.dto.ParentStudentAttendanceDto
 import id.tandara.parent.domain.model.AttendanceRecord
 import id.tandara.parent.domain.model.AttendanceStatus
@@ -12,21 +14,36 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 
 class AttendanceRepositoryImpl(
-    private val api: AttendanceApiService
+    private val api: AttendanceApiService,
+    private val sessionManager: SessionStore,
+    private val cache: LocalCacheStore
 ) : AttendanceRepository {
+
+    private suspend fun accountId() = sessionManager.sessionFlow.first().let { it.parentId.ifBlank { it.username } }
 
     override suspend fun getTodayAttendance(studentId: String): ApiResult<AttendanceRecord?> {
         return try {
             val response = api.getTodayAttendance(studentId)
             if (!response.isSuccessful) {
-                return apiError(response.code(), response.errorBody()?.string())
+                val error = apiError(response.code(), response.errorBody()?.string())
+                if (error is ApiResult.BackendUnavailable) {
+                    return cache.today(accountId(), studentId, LocalDate.now().toString())
+                        ?.let { ApiResult.Success(it.value, true, it.fetchedAt) } ?: error
+                }
+                return error
             }
-            val dto = response.body()?.data ?: return ApiResult.Success(null)
-            ApiResult.Success(dto.toAttendanceRecord())
+            val dto = response.body()?.data
+            val mapped = dto?.toAttendanceRecord()
+            val today = LocalDate.now().toString()
+            cache.putToday(accountId(), studentId, today, mapped)
+            ApiResult.Success(mapped, lastUpdatedAt = System.currentTimeMillis())
         } catch (_: IOException) {
-            ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
+            val cached = cache.today(accountId(), studentId, LocalDate.now().toString())
+            cached?.let { ApiResult.Success(it.value, true, it.fetchedAt) }
+                ?: ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
         } catch (_: Exception) {
             ApiResult.Error("Gagal memuat data presensi hari ini.")
         }
@@ -37,10 +54,11 @@ class AttendanceRepositoryImpl(
         month: Int,
         year: Int
     ): ApiResult<AttendanceSummary> {
-        val records = when (val result = getMonthlyAttendanceRecords(studentId, month, year)) {
-            is ApiResult.Success -> result.data
-            is ApiResult.Error -> return result
-            is ApiResult.BackendUnavailable -> return result
+        val recordsResult = getMonthlyAttendanceRecords(studentId, month, year)
+        val records = when (recordsResult) {
+            is ApiResult.Success -> recordsResult.data
+            is ApiResult.Error -> return recordsResult
+            is ApiResult.BackendUnavailable -> return recordsResult
             ApiResult.Loading -> return ApiResult.Error("Data ringkasan belum siap.")
         }
         val summary = AttendanceSummary(
@@ -50,7 +68,7 @@ class AttendanceRepositoryImpl(
             unexcusedCount = records.count { it.status == AttendanceStatus.UNEXCUSED },
             monthYear = java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.FULL, Locale("id", "ID")) + " $year"
         )
-        return ApiResult.Success(summary)
+        return ApiResult.Success(summary, recordsResult.isStale, recordsResult.lastUpdatedAt)
     }
 
     override suspend fun getMonthlyAttendanceRecords(
@@ -68,12 +86,23 @@ class AttendanceRepositoryImpl(
                 pageSize = 100
             )
             if (!response.isSuccessful) {
-                return apiError(response.code(), response.errorBody()?.string())
+                val error = apiError(response.code(), response.errorBody()?.string())
+                if (error is ApiResult.BackendUnavailable) {
+                    val period = "%04d-%02d".format(year, month)
+                    return cache.reports(accountId(), studentId, period)
+                        ?.let { ApiResult.Success(it.value, true, it.fetchedAt) } ?: error
+                }
+                return error
             }
             val items = response.body()?.data?.items ?: emptyList()
-            ApiResult.Success(items.map { it.toAttendanceRecord() })
+            val mapped = items.mapNotNull { it.toAttendanceRecord() }.distinctBy { it.id.ifBlank { it.date } }
+            val period = "%04d-%02d".format(year, month)
+            cache.putReports(accountId(), studentId, period, mapped)
+            ApiResult.Success(mapped, lastUpdatedAt = System.currentTimeMillis())
         } catch (_: IOException) {
-            ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
+            val period = "%04d-%02d".format(year, month)
+            cache.reports(accountId(), studentId, period)?.let { ApiResult.Success(it.value, true, it.fetchedAt) }
+                ?: ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
         } catch (_: Exception) {
             ApiResult.Error("Gagal memuat riwayat presensi siswa.")
         }
@@ -85,17 +114,21 @@ class AttendanceRepositoryImpl(
             401 -> ApiResult.Error("Sesi tidak valid atau telah berakhir.", code)
             403 -> ApiResult.Error("Akses ke data presensi ditolak.", code)
             404 -> ApiResult.Error("Data presensi tidak ditemukan.", code)
-            500, 502, 503 -> ApiResult.BackendUnavailable("Server Tandara sedang tidak tersedia.")
-            else -> ApiResult.Error(message, code)
+            else -> if (code >= 500 || code == 408 || code == 429) {
+                ApiResult.BackendUnavailable("Server Tandara sedang tidak tersedia.")
+            } else {
+                ApiResult.Error(message, code)
+            }
         }
     }
 
-    private fun ParentStudentAttendanceDto.toAttendanceRecord(): AttendanceRecord {
+    private fun ParentStudentAttendanceDto.toAttendanceRecord(): AttendanceRecord? {
+        if (id == null) return null
         val date = date?.let { LocalDate.parse(it) }
         val checkIn = checkInAt?.takeIf { it.isNotBlank() }?.let { parseLocalDateTime(it) }
         val checkOut = checkOutAt?.takeIf { it.isNotBlank() }?.let { parseLocalDateTime(it) }
         return AttendanceRecord(
-            id = id ?: "",
+            id = id.toString(),
             date = date?.format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale("id", "ID"))) ?: "-",
             dayName = date?.dayOfWeek?.getDisplayName(java.time.format.TextStyle.FULL, Locale("id", "ID")) ?: "-",
             checkInTime = checkIn?.format(DateTimeFormatter.ofPattern("HH:mm")),

@@ -2,7 +2,7 @@
 
 Audit date: 2026-09-28 (Asia/Jakarta)
 
-This document records the exported Android project's current baseline and a future integration plan. It does not define a final backend contract, connect the app to a server, add WebSocket behavior, or add FCM.
+Historical Phase 0 baseline and implementation plan, captured before backend integration. Its mock-only descriptions are superseded by the current app and should not be used to infer runtime behavior. The file is retained as project history; see `backend-integration-map.md` for the active API/cache architecture. This historical plan does not add FCM.
 
 ## 1. Current Android architecture
 
@@ -240,16 +240,15 @@ The current notification center is an appropriate surface, but it must consume i
 ## 13. Development base URL and HTTP strategy
 
 - Android device `localhost` refers to that device, not the development laptop.
-- A physical device will use an environment-specific laptop LAN address such as `http://192.168.x.x:8000`, supplied outside source control through the centralized build configuration.
-- Emulator development may use `10.0.2.2`, also through the same build configuration.
+- Physical-device and emulator endpoints are supplied at build/run time through `TANDARA_API_BASE_URL` or `scripts/run-android.sh --api-url`; no LAN address belongs in source control.
 - Production must use HTTPS.
-- The manifest has no cleartext opt-in or network security configuration. With the current target SDK, HTTP is blocked by default. If LAN HTTP is temporarily required, add a debug-only, narrowly scoped network security policy for the known development host rather than globally enabling cleartext.
-- Current source contains active-looking hardcoded HTTP examples (`10.0.2.2` and `192.168.10.10`) even though networking is unused. Remove/replace them when the build-variant strategy is introduced.
+- The debug variant permits cleartext HTTP for local LAN testing; release retains Android's secure default and must use HTTPS.
+- Current source does not contain a concrete LAN address; `--api-url` supplies the current development endpoint.
 
 ## 14. Security considerations
 
 - No real API key, JWT, access token, or production password was found.
-- `parent123` is a plainly labeled mock password; keep it out of production variants and screenshots/docs intended as real credentials.
+- Historical mock credentials were removed from this plan; do not use sample credentials as real account data.
 - `.env.example`, README, metadata, Firebase AI dependency, App Check dependencies, Google Services plugin, and secrets plugin are AI Studio artifacts. The app does not call Gemini and should not need a Gemini key.
 - `googleServices.missing.passthrough=true` and the Firebase scaffolding can hide an incomplete service setup; remove only after the dependency cleanup decision.
 - The generated release signing block reads passwords from environment variables, which is appropriate in principle, but the default keystore path and release process must be reviewed. The debug block contains standard debug-keystore credentials and references a missing ignored `debug.keystore`.

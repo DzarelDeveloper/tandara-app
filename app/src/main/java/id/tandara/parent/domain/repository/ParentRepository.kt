@@ -15,4 +15,5 @@ interface ParentRepository {
     suspend fun getUnreadNotificationCount(): ApiResult<Int>
     suspend fun markNotificationRead(notificationId: String): ApiResult<ParentNotification>
     suspend fun markAllNotificationsRead(): ApiResult<Int>
+    suspend fun cacheRealtimeNotification(notification: ParentNotification)
 }

@@ -13,8 +13,8 @@ data class CreateLeaveRequestDto(
 
 @JsonClass(generateAdapter = true)
 data class LeaveResponseDto(
-    @Json(name = "id") val id: String,
-    @Json(name = "student_id") val studentId: String? = null,
+    @Json(name = "id") val id: Long,
+    @Json(name = "student_id") val studentId: Long? = null,
     @Json(name = "student_name") val studentName: String? = null,
     @Json(name = "leave_date") val leaveDate: String? = null,
     @Json(name = "leave_type") val leaveType: String? = null,
@@ -25,7 +25,7 @@ data class LeaveResponseDto(
 
 @JsonClass(generateAdapter = true)
 data class LeaveCreateResultDto(
-    @Json(name = "id") val id: String,
+    @Json(name = "id") val id: Long,
     @Json(name = "status") val status: String
 )
 

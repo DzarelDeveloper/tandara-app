@@ -4,7 +4,8 @@ import id.tandara.parent.domain.model.Parent
 
 data class SettingsUiState(
     val currentParent: Parent? = null,
-    val maskedPhoneNumber: String = "0812••••7890",
+    val username: String = "",
+    val maskedPhoneNumber: String = "",
     val appearance: String = "light", // "light", "dark", "system"
     val showThemeDialog: Boolean = false,
     val isNotificationsEnabled: Boolean = false,

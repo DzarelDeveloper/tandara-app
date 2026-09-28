@@ -17,7 +17,7 @@ data class StudentDto(
 @JsonClass(generateAdapter = true)
 data class ParentStudentAttendanceDto(
     @Json(name = "student") val student: StudentDto? = null,
-    @Json(name = "id") val id: String? = null,
+    @Json(name = "id") val id: Long? = null,
     @Json(name = "date") val date: String? = null,
     @Json(name = "status") val status: String? = null,
     @Json(name = "check_in_at") val checkInAt: String? = null,
@@ -62,6 +62,14 @@ data class NotificationDto(
     @Json(name = "is_read") val isRead: Boolean,
     @Json(name = "read_at") val readAt: String? = null,
     @Json(name = "created_at") val createdAt: String
+)
+
+@JsonClass(generateAdapter = true)
+data class ParentNotificationsPageDto(
+    @Json(name = "items") val items: List<NotificationDto> = emptyList(),
+    @Json(name = "page") val page: Int = 1,
+    @Json(name = "page_size") val pageSize: Int = 20,
+    @Json(name = "total") val total: Int = 0
 )
 
 @JsonClass(generateAdapter = true)

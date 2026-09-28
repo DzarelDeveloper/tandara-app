@@ -3,8 +3,12 @@ package id.tandara.parent
 import id.tandara.parent.core.common.DateUtils
 import id.tandara.parent.core.common.PhoneUtils
 import id.tandara.parent.core.network.ApiResult
+import id.tandara.parent.data.remote.dto.ApiEnvelope
 import id.tandara.parent.data.remote.dto.NotificationDto
 import id.tandara.parent.data.remote.dto.NotificationStudentDto
+import id.tandara.parent.data.remote.dto.ParentNotificationsPageDto
+import id.tandara.parent.data.remote.dto.ParentStudentAttendanceDto
+import id.tandara.parent.data.remote.dto.LeaveResponseDto
 import id.tandara.parent.domain.model.AttendanceRecord
 import id.tandara.parent.domain.model.AttendanceStatus
 import id.tandara.parent.domain.model.AttendanceSummary
@@ -13,6 +17,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
 class TandaraValidationTest {
 
@@ -85,6 +92,30 @@ class TandaraValidationTest {
         assertEquals(LeaveStatus.APPROVED, LeaveStatus.fromBackend("APPROVED"))
         assertEquals(LeaveStatus.REJECTED, LeaveStatus.fromBackend("REJECTED"))
         assertEquals(LeaveStatus.PENDING, LeaveStatus.fromBackend("UNKNOWN"))
+    }
+
+    @Test
+    fun testBackendNumericAndPagedResponseContracts() {
+        val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+        val notificationsType = Types.newParameterizedType(
+            ApiEnvelope::class.java,
+            ParentNotificationsPageDto::class.java
+        )
+        val notifications = moshi.adapter<ApiEnvelope<ParentNotificationsPageDto>>(notificationsType)
+            .fromJson("""{"success":true,"data":{"items":[{"id":7,"type":"INFO","title":"Info","message":"Pesan","is_read":false,"created_at":"2026-09-29T07:00:00"}],"page":1,"page_size":20,"total":1}}""")
+        assertEquals(7, notifications?.data?.items?.single()?.id)
+
+        val attendance = moshi.adapter(ParentStudentAttendanceDto::class.java)
+            .fromJson("""{"id":14,"date":"2026-09-29","status":"PRESENT"}""")
+        assertEquals(14L, attendance?.id)
+        val emptyAttendance = moshi.adapter(ParentStudentAttendanceDto::class.java)
+            .fromJson("""{"id":null,"date":"2026-09-29","status":null}""")
+        assertEquals(null, emptyAttendance?.id)
+
+        val leave = moshi.adapter(LeaveResponseDto::class.java)
+            .fromJson("""{"id":19,"student_id":4,"leave_date":"2026-09-29","status":"PENDING"}""")
+        assertEquals(19L, leave?.id)
+        assertEquals(4L, leave?.studentId)
     }
 
     @Test

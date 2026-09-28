@@ -44,4 +44,9 @@ open class MainActivity : ComponentActivity() {
         val container = (application as TandaraApplication).container
         container.parentRealtimeCoordinator.onAppForeground()
     }
+
+    override fun onPause() {
+        (application as TandaraApplication).container.parentRealtimeCoordinator.onAppBackground()
+        super.onPause()
+    }
 }

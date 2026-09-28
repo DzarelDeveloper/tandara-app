@@ -81,6 +81,7 @@ import id.tandara.parent.core.designsystem.WarningAmber
 import id.tandara.parent.core.designsystem.WarningAmberBg
 import id.tandara.parent.domain.model.LeaveType
 import id.tandara.parent.ui.components.ConfirmationDialog
+import id.tandara.parent.ui.components.ConnectionStateBanner
 import id.tandara.parent.ui.components.TandaraBrandTopAppBar
 import id.tandara.parent.ui.components.TandaraButton
 import id.tandara.parent.ui.components.TandaraOutlinedButton
@@ -272,6 +273,7 @@ fun PermissionScreen(
                 .padding(horizontal = 18.dp)
                 .padding(bottom = 36.dp)
         ) {
+            ConnectionStateBanner(isOffline = uiState.isOffline, lastUpdatedAt = uiState.lastUpdatedAt)
             Spacer(modifier = Modifier.height(14.dp))
 
             // Header: Izin & Ketidakhadiran + Student Context (Fixed single student, NO dropdown)
@@ -703,7 +705,8 @@ fun PermissionScreen(
             } else {
                 PermissionHistoryList(
                     history = uiState.leaveHistory,
-                    selectedStudent = uiState.selectedStudent
+                    selectedStudent = uiState.selectedStudent,
+                    historyAvailable = uiState.leaveHistoryAvailable
                 )
             }
         }
@@ -713,7 +716,8 @@ fun PermissionScreen(
 @Composable
 private fun PermissionHistoryList(
     history: List<id.tandara.parent.domain.model.LeaveRequest>,
-    selectedStudent: id.tandara.parent.domain.model.Student?
+    selectedStudent: id.tandara.parent.domain.model.Student?,
+    historyAvailable: Boolean
 ) {
     if (history.isEmpty()) {
         Box(
@@ -725,7 +729,11 @@ private fun PermissionHistoryList(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Belum ada riwayat izin.",
+                text = when {
+                    selectedStudent == null -> "Data siswa belum tersedia."
+                    historyAvailable -> "Belum ada riwayat izin."
+                    else -> "Riwayat izin belum dapat dimuat."
+                },
                 color = SecondaryText,
                 fontSize = 14.sp
             )

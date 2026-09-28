@@ -2,21 +2,23 @@ package id.tandara.parent.data.repository
 
 import id.tandara.parent.core.network.ApiResult
 import id.tandara.parent.data.remote.AuthApiService
+import id.tandara.parent.data.local.LocalCacheStore
 import id.tandara.parent.data.remote.dto.LoginRequestDto
 import id.tandara.parent.data.remote.dto.ParentSessionDto
-import id.tandara.parent.data.session.SessionManager
+import id.tandara.parent.data.session.SessionStore
 import id.tandara.parent.domain.model.Parent
 import id.tandara.parent.domain.repository.AuthRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
-class AuthRepositoryImpl(private val sessionManager: SessionManager, private val api: AuthApiService) : AuthRepository {
+class AuthRepositoryImpl(private val sessionManager: SessionStore, private val api: AuthApiService, private val cache: LocalCacheStore) : AuthRepository {
     override val currentParentSession: Flow<Parent?> = sessionManager.sessionFlow.map { user ->
-        if (user.isAuthenticated) Parent(user.username, user.displayName, user.phoneNumber, user.role) else null
+        if (user.isAuthenticated) Parent(user.parentId, user.displayName, user.phoneNumber, user.role) else null
     }
 
     override suspend fun login(username: String, password: String): ApiResult<Parent> {
@@ -43,9 +45,16 @@ class AuthRepositoryImpl(private val sessionManager: SessionManager, private val
         return try {
             val response = api.parentSession("Bearer $token")
             if (!response.isSuccessful) {
-                val result = mapError(response.code(), response.errorBody()?.string())
-                if (response.code() == 401 || response.code() == 403) sessionManager.clearSession()
-                result
+                val code = response.code()
+                if (code == 401 || code == 403) {
+                    sessionManager.clearSession()
+                    return mapError(code, response.errorBody()?.string())
+                }
+                if (code == 408 || code == 429 || code in 500..599) {
+                    response.errorBody()?.close()
+                    return ApiResult.BackendUnavailable("Server Tandara sedang tidak tersedia.")
+                }
+                mapError(code, response.errorBody()?.string())
             } else saveVerifiedSession(token, response.body()?.data ?: return ApiResult.Error("Respons server Tandara tidak valid.", 502))
         } catch (_: SocketTimeoutException) { ApiResult.BackendUnavailable("Waktu koneksi ke server Tandara habis.")
         } catch (_: IOException) { ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.") }
@@ -55,7 +64,7 @@ class AuthRepositoryImpl(private val sessionManager: SessionManager, private val
         val parent = session.parent
         if (parent.role != "PARENT") return ApiResult.Error("Akun ini bukan akun orang tua/wali.", 403)
         val student = session.student
-        sessionManager.saveSession(token, parent.fullName, parent.phoneNumber, parent.username, parent.role, student.id.toString(), student.fullName, student.nis, student.className)
+        sessionManager.saveSession(token, parent.id.toString(), parent.fullName, parent.phoneNumber, parent.username, parent.role, student.id.toString(), student.fullName, student.nis, student.className)
         return ApiResult.Success(Parent(parent.id.toString(), parent.fullName, parent.phoneNumber, parent.role))
     }
 
@@ -73,6 +82,11 @@ class AuthRepositoryImpl(private val sessionManager: SessionManager, private val
         return ApiResult.Error(message, status)
     }
 
-    override suspend fun logout() = sessionManager.clearSession()
+    override suspend fun logout() {
+        val session = sessionManager.sessionFlow.first()
+        val account = session.parentId.ifBlank { session.username }
+        if (account.isNotBlank()) cache.clearAccount(account)
+        sessionManager.clearSession()
+    }
     override suspend fun changePassword(current: String, new: String): ApiResult<Unit> = ApiResult.BackendUnavailable("Perubahan kata sandi belum tersedia pada fase ini.")
 }

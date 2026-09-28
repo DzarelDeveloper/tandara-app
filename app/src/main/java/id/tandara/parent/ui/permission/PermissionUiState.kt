@@ -8,6 +8,7 @@ import id.tandara.parent.domain.model.Student
 data class PermissionUiState(
     val selectedStudent: Student? = null,
     val leaveHistory: List<LeaveRequest> = emptyList(),
+    val leaveHistoryAvailable: Boolean = false,
     val selectedType: LeaveType = LeaveType.SICK,
     val startDateMillis: Long? = null,
     val endDateMillis: Long? = null,
@@ -24,5 +25,7 @@ data class PermissionUiState(
     val canSubmit: Boolean = false, // true only if student linked & form valid
     val snackbarMessage: String? = null,
     val previewValidationActive: Boolean = false,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val isOffline: Boolean = false,
+    val lastUpdatedAt: Long? = null
 )

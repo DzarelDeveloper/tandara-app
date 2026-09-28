@@ -1,6 +1,5 @@
 package id.tandara.parent.ui.components
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,13 +31,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import id.tandara.parent.R
 import id.tandara.parent.core.designsystem.BorderColor
 import id.tandara.parent.core.designsystem.DividerColor
 import id.tandara.parent.core.designsystem.ElevatedSurface
@@ -78,31 +74,19 @@ fun PermanentStudentIdentityCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Student Avatar
-            if (student?.photoUrl?.contains("alya") == true || student?.id == "std_alya") {
-                Image(
-                    painter = painterResource(id = R.drawable.student_avatar_alya_1790336223122),
-                    contentDescription = student.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .border(1.5.dp, BorderColor, CircleShape)
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(SecondarySurface, CircleShape)
+                    .border(1.5.dp, BorderColor, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = null,
+                    tint = SecondaryText,
+                    modifier = Modifier.size(24.dp)
                 )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(SecondarySurface, CircleShape)
-                        .border(1.5.dp, BorderColor, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Person,
-                        contentDescription = null,
-                        tint = SecondaryText,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.width(14.dp))
@@ -194,31 +178,19 @@ fun ChildDetailBottomSheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Student photo
-            if (student.photoUrl?.contains("alya") == true || student.id == "std_alya") {
-                Image(
-                    painter = painterResource(id = R.drawable.student_avatar_alya_1790336223122),
-                    contentDescription = student.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .border(2.dp, BorderColor, CircleShape)
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .background(SecondarySurface, CircleShape)
+                    .border(2.dp, BorderColor, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = null,
+                    tint = SecondaryText,
+                    modifier = Modifier.size(40.dp)
                 )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .background(SecondarySurface, CircleShape)
-                        .border(2.dp, BorderColor, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Person,
-                        contentDescription = null,
-                        tint = SecondaryText,
-                        modifier = Modifier.size(40.dp)
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

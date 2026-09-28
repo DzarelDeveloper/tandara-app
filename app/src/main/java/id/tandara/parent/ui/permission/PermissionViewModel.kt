@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import id.tandara.parent.core.common.DateUtils
 import id.tandara.parent.core.network.ApiResult
+import id.tandara.parent.data.realtime.ParentRealtimeCoordinator
 import id.tandara.parent.domain.model.LeaveAttachment
 import id.tandara.parent.domain.model.LeaveRequest
 import id.tandara.parent.domain.model.LeaveType
@@ -19,13 +20,25 @@ import kotlinx.coroutines.launch
 
 class PermissionViewModel(
     private val parentRepository: ParentRepository,
-    private val permissionRepository: PermissionRepository
+    private val permissionRepository: PermissionRepository,
+    private val realtimeCoordinator: ParentRealtimeCoordinator
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PermissionUiState())
     val uiState: StateFlow<PermissionUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            realtimeCoordinator.networkConnected.collect { connected ->
+                if (!connected) {
+                    _uiState.update { it.copy(isOffline = true) }
+                    validateForm()
+                }
+            }
+        }
+        viewModelScope.launch {
+            realtimeCoordinator.refreshEvents.collect { loadStudent() }
+        }
         loadStudent()
     }
 
@@ -34,7 +47,7 @@ class PermissionViewModel(
             val result = parentRepository.getLinkedStudents()
             if (result is ApiResult.Success) {
                 val student = result.data.firstOrNull()
-                _uiState.update { it.copy(selectedStudent = student, isLoading = true) }
+                _uiState.update { it.copy(selectedStudent = student, isLoading = true, isOffline = result.isStale) }
                 validateForm()
                 loadLeaveHistory(student?.id)
             }
@@ -46,9 +59,9 @@ class PermissionViewModel(
         viewModelScope.launch {
             val result = permissionRepository.getLeaveHistory(studentId)
             if (result is ApiResult.Success) {
-                _uiState.update { it.copy(leaveHistory = result.data, isLoading = false) }
+                _uiState.update { it.copy(leaveHistory = result.data, leaveHistoryAvailable = true, isLoading = false, isOffline = result.isStale || it.isOffline, lastUpdatedAt = result.lastUpdatedAt) }
             } else {
-                _uiState.update { it.copy(isLoading = false) }
+                _uiState.update { it.copy(leaveHistoryAvailable = false, isLoading = false, isOffline = result is ApiResult.BackendUnavailable || it.isOffline) }
             }
         }
     }
@@ -166,7 +179,7 @@ class PermissionViewModel(
         val isFormValid = hasDates && datesValid && isReasonValid
 
         // Submit requires linked student (or preview validation mode for verification)
-        val canSubmit = isFormValid && (current.selectedStudent != null || current.previewValidationActive)
+        val canSubmit = isFormValid && !current.isOffline && (current.selectedStudent != null || current.previewValidationActive)
 
         _uiState.update {
             it.copy(
@@ -178,6 +191,10 @@ class PermissionViewModel(
     }
 
     fun requestSubmit() {
+        if (_uiState.value.isOffline) {
+            _uiState.update { it.copy(snackbarMessage = "Pengajuan izin memerlukan koneksi ke server Tandara.") }
+            return
+        }
         if (_uiState.value.canSubmit) {
             _uiState.update { it.copy(showConfirmDialog = true) }
         }
@@ -194,8 +211,8 @@ class PermissionViewModel(
             val request = LeaveRequest(
                 studentId = current.selectedStudent?.id ?: "unknown",
                 type = current.selectedType,
-                startDate = current.startDateText,
-                endDate = current.endDateText,
+                startDate = current.startDateMillis?.let(DateUtils::formatToApiDate).orEmpty(),
+                endDate = current.endDateMillis?.let(DateUtils::formatToApiDate).orEmpty(),
                 reason = current.reason,
                 attachment = current.attachment
             )
@@ -237,11 +254,12 @@ class PermissionViewModel(
 
     class Factory(
         private val parentRepository: ParentRepository,
-        private val permissionRepository: PermissionRepository
+        private val permissionRepository: PermissionRepository,
+        private val realtimeCoordinator: ParentRealtimeCoordinator
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return PermissionViewModel(parentRepository, permissionRepository) as T
+            return PermissionViewModel(parentRepository, permissionRepository, realtimeCoordinator) as T
         }
     }
 }

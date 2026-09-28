@@ -79,7 +79,7 @@ enum class NotificationType {
 
 /**
  * Dark Navy Notification Center Bottom Sheet.
- * Displays notifications strictly for the assigned student (Alya Putri).
+ * Displays notifications for the authenticated Parent's assigned student.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

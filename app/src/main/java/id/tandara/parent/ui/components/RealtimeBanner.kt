@@ -31,6 +31,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import id.tandara.parent.core.designsystem.BorderColor
 import id.tandara.parent.core.designsystem.ElevatedSurface
 import id.tandara.parent.core.designsystem.PrimaryText
@@ -118,6 +121,7 @@ fun RealtimeAttendanceBanner(
 @Composable
 fun ConnectionStateBanner(
     isOffline: Boolean,
+    lastUpdatedAt: Long? = null,
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -146,7 +150,12 @@ fun ConnectionStateBanner(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Anda sedang offline. Menampilkan data terakhir yang tersedia.",
+                    text = lastUpdatedAt?.let {
+                        val time = Instant.ofEpochMilli(it)
+                            .atZone(ZoneId.systemDefault())
+                            .format(DateTimeFormatter.ofPattern("HH:mm"))
+                        "Offline · data terakhir diperbarui pukul $time"
+                    } ?: "Offline · menampilkan data terakhir yang tersedia",
                     fontSize = 12.sp,
                     color = SecondaryText
                 )

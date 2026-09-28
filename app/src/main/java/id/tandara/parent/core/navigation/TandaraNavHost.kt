@@ -212,7 +212,8 @@ fun TandaraNavHost(
                 val reportsVm: ReportsViewModel = viewModel(
                     factory = ReportsViewModel.Factory(
                         container.parentRepository,
-                        container.attendanceRepository
+                        container.attendanceRepository,
+                        container.parentRealtimeCoordinator
                     )
                 )
                 ReportsScreen(viewModel = reportsVm)
@@ -223,7 +224,8 @@ fun TandaraNavHost(
                 val permissionVm: PermissionViewModel = viewModel(
                     factory = PermissionViewModel.Factory(
                         container.parentRepository,
-                        container.permissionRepository
+                        container.permissionRepository,
+                        container.parentRealtimeCoordinator
                     )
                 )
                 PermissionScreen(viewModel = permissionVm)

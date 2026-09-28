@@ -18,6 +18,11 @@ object DateUtils {
         return sdf.format(Date(millis))
     }
 
+    fun formatToApiDate(millis: Long): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        return sdf.format(Date(millis))
+    }
+
     fun getCurrentMonthYear(): String {
         val sdf = SimpleDateFormat("MMMM yyyy", localeId)
         return sdf.format(Date())

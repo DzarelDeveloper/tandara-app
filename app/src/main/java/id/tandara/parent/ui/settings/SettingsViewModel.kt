@@ -32,7 +32,7 @@ class SettingsViewModel(
                 val masked = if (parent != null) {
                     PhoneUtils.maskPhoneNumber(parent.phoneNumber)
                 } else {
-                    "0812••••7890"
+                    ""
                 }
                 _uiState.update {
                     it.copy(
@@ -45,6 +45,11 @@ class SettingsViewModel(
     }
 
     private fun observePreferences() {
+        viewModelScope.launch {
+            sessionManager.sessionFlow.collect { session ->
+                _uiState.update { it.copy(username = session.username) }
+            }
+        }
         viewModelScope.launch {
             sessionManager.notificationsEnabledFlow.collect { enabled ->
                 _uiState.update { it.copy(isNotificationsEnabled = enabled) }
