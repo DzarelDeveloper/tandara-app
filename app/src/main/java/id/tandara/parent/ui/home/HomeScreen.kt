@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -495,6 +496,7 @@ fun HomeScreen(
                         contentColor = Color.White
                     ),
                     shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
@@ -508,8 +510,10 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Ajukan Izin",
+                        modifier = Modifier.weight(1f),
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2
                     )
                 }
 
@@ -524,6 +528,7 @@ fun HomeScreen(
                         brush = androidx.compose.ui.graphics.SolidColor(BorderColor)
                     ),
                     shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
@@ -538,8 +543,10 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Lihat Laporan",
+                        modifier = Modifier.weight(1f),
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2
                     )
                 }
             }

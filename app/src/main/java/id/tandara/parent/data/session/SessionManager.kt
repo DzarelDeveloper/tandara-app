@@ -24,7 +24,9 @@ data class SessionUser(
     val studentId: String = "",
     val studentName: String = "",
     val studentNis: String = "",
-    val studentClass: String = ""
+    val studentClass: String = "",
+    val parentPhotoUrl: String = "",
+    val studentPhotoUrl: String = ""
 )
 
 interface SessionStore {
@@ -40,7 +42,9 @@ interface SessionStore {
         studentId: String,
         studentName: String,
         studentNis: String,
-        studentClass: String
+        studentClass: String,
+        parentPhotoUrl: String = "",
+        studentPhotoUrl: String = ""
     )
     suspend fun clearSession()
 }
@@ -58,6 +62,8 @@ class SessionManager(private val context: Context) : SessionStore {
         private val KEY_STUDENT_NAME = stringPreferencesKey("student_name")
         private val KEY_STUDENT_NIS = stringPreferencesKey("student_nis")
         private val KEY_STUDENT_CLASS = stringPreferencesKey("student_class")
+        private val KEY_PARENT_PHOTO_URL = stringPreferencesKey("parent_photo_url")
+        private val KEY_STUDENT_PHOTO_URL = stringPreferencesKey("student_photo_url")
         private val KEY_NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
         private val KEY_HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_onboarding")
         private val KEY_APPEARANCE = stringPreferencesKey("app_appearance")
@@ -87,7 +93,9 @@ class SessionManager(private val context: Context) : SessionStore {
             studentId = prefs[KEY_STUDENT_ID] ?: "",
             studentName = prefs[KEY_STUDENT_NAME] ?: "",
             studentNis = prefs[KEY_STUDENT_NIS] ?: "",
-            studentClass = prefs[KEY_STUDENT_CLASS] ?: ""
+            studentClass = prefs[KEY_STUDENT_CLASS] ?: "",
+            parentPhotoUrl = prefs[KEY_PARENT_PHOTO_URL] ?: "",
+            studentPhotoUrl = prefs[KEY_STUDENT_PHOTO_URL] ?: ""
         )
     }
 
@@ -115,7 +123,7 @@ class SessionManager(private val context: Context) : SessionStore {
         }
     }
 
-    override suspend fun saveSession(accessToken: String, parentId: String, displayName: String, phoneNumber: String, username: String, role: String, studentId: String, studentName: String, studentNis: String, studentClass: String) {
+    override suspend fun saveSession(accessToken: String, parentId: String, displayName: String, phoneNumber: String, username: String, role: String, studentId: String, studentName: String, studentNis: String, studentClass: String, parentPhotoUrl: String, studentPhotoUrl: String) {
         securePrefs.edit().putString(KEY_ACCESS_TOKEN, accessToken).apply()
         context.dataStore.edit { prefs ->
             prefs[KEY_IS_AUTHENTICATED] = true
@@ -128,6 +136,8 @@ class SessionManager(private val context: Context) : SessionStore {
             prefs[KEY_STUDENT_NAME] = studentName
             prefs[KEY_STUDENT_NIS] = studentNis
             prefs[KEY_STUDENT_CLASS] = studentClass
+            prefs[KEY_PARENT_PHOTO_URL] = parentPhotoUrl
+            prefs[KEY_STUDENT_PHOTO_URL] = studentPhotoUrl
         }
     }
 
@@ -144,6 +154,8 @@ class SessionManager(private val context: Context) : SessionStore {
             prefs.remove(KEY_STUDENT_NAME)
             prefs.remove(KEY_STUDENT_NIS)
             prefs.remove(KEY_STUDENT_CLASS)
+            prefs.remove(KEY_PARENT_PHOTO_URL)
+            prefs.remove(KEY_STUDENT_PHOTO_URL)
             // Note: harmless preferences like notification toggle are preserved as required
         }
     }

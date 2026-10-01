@@ -8,14 +8,18 @@ import id.tandara.parent.core.network.ApiResult
 import id.tandara.parent.data.realtime.ParentRealtimeCoordinator
 import id.tandara.parent.domain.model.LeaveAttachment
 import id.tandara.parent.domain.model.LeaveRequest
+import id.tandara.parent.domain.model.LeaveStatus
 import id.tandara.parent.domain.model.LeaveType
 import id.tandara.parent.domain.model.Student
 import id.tandara.parent.domain.repository.ParentRepository
 import id.tandara.parent.domain.repository.PermissionRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class PermissionViewModel(
@@ -27,6 +31,8 @@ class PermissionViewModel(
     private val _uiState = MutableStateFlow(PermissionUiState())
     val uiState: StateFlow<PermissionUiState> = _uiState.asStateFlow()
 
+    private var pendingPollingJob: Job? = null
+
     init {
         viewModelScope.launch {
             realtimeCoordinator.networkConnected.collect { connected ->
@@ -37,33 +43,99 @@ class PermissionViewModel(
             }
         }
         viewModelScope.launch {
-            realtimeCoordinator.refreshEvents.collect { loadStudent() }
+            realtimeCoordinator.refreshEvents.collect {
+                silentRefresh()
+            }
+        }
+        viewModelScope.launch {
+            realtimeCoordinator.events.collect { event ->
+                when (event.type) {
+                    "LEAVE_APPROVED", "LEAVE_REJECTED" -> {
+                        val studentId = _uiState.value.selectedStudent?.id
+                        val match = event.notification.relatedStudentId == null ||
+                                event.notification.relatedStudentId == studentId
+                        if (match) silentRefresh()
+                    }
+                }
+            }
         }
         loadStudent()
     }
 
-    private fun loadStudent() {
+    private fun silentRefresh() {
+        loadStudent(silent = true)
+    }
+
+    private fun loadStudent(silent: Boolean = false) {
         viewModelScope.launch {
             val result = parentRepository.getLinkedStudents()
             if (result is ApiResult.Success) {
                 val student = result.data.firstOrNull()
-                _uiState.update { it.copy(selectedStudent = student, isLoading = true, isOffline = result.isStale) }
+                if (!silent) {
+                    _uiState.update {
+                        it.copy(selectedStudent = student, isLoading = true, isOffline = result.isStale)
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(selectedStudent = student, isOffline = result.isStale || it.isOffline)
+                    }
+                }
                 validateForm()
-                loadLeaveHistory(student?.id)
+                loadLeaveHistory(student?.id, silent = silent)
             }
         }
     }
 
-    private fun loadLeaveHistory(studentId: String? = _uiState.value.selectedStudent?.id) {
+    private fun loadLeaveHistory(studentId: String? = _uiState.value.selectedStudent?.id, silent: Boolean = false) {
         if (studentId.isNullOrBlank()) return
         viewModelScope.launch {
             val result = permissionRepository.getLeaveHistory(studentId)
             if (result is ApiResult.Success) {
-                _uiState.update { it.copy(leaveHistory = result.data, leaveHistoryAvailable = true, isLoading = false, isOffline = result.isStale || it.isOffline, lastUpdatedAt = result.lastUpdatedAt) }
+                _uiState.update {
+                    it.copy(
+                        leaveHistory = result.data,
+                        leaveHistoryAvailable = true,
+                        isLoading = if (silent) it.isLoading else false,
+                        isOffline = if (silent) (result.isStale || it.isOffline) else (result.isStale || it.isOffline),
+                        lastUpdatedAt = result.lastUpdatedAt
+                    )
+                }
+                ensurePendingPolling(result.data)
             } else {
-                _uiState.update { it.copy(leaveHistoryAvailable = false, isLoading = false, isOffline = result is ApiResult.BackendUnavailable || it.isOffline) }
+                if (!silent) {
+                    _uiState.update { it.copy(leaveHistoryAvailable = false, isLoading = false, isOffline = result is ApiResult.BackendUnavailable || it.isOffline) }
+                }
             }
         }
+    }
+
+    private fun ensurePendingPolling(current: List<LeaveRequest>) {
+        val hasPending = current.any { it.status == LeaveStatus.PENDING }
+        val authenticated = _uiState.value.selectedStudent != null
+        if (hasPending && authenticated && pendingPollingJob?.isActive != true) {
+            startPendingPolling()
+        } else if (!hasPending && pendingPollingJob?.isActive == true) {
+            pendingPollingJob?.cancel()
+            pendingPollingJob = null
+        }
+    }
+
+    private fun startPendingPolling() {
+        pendingPollingJob = viewModelScope.launch {
+            while (isActive) {
+                delay(12_000L)
+                if (!realtimeCoordinator.isAppForeground.value) continue
+                if (!realtimeCoordinator.networkConnected.value) continue
+                val studentId = _uiState.value.selectedStudent?.id ?: continue
+                loadLeaveHistory(studentId, silent = true)
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        pendingPollingJob?.cancel()
+        pendingPollingJob = null
     }
 
     fun onTypeSelected(type: LeaveType) {
@@ -87,7 +159,6 @@ class PermissionViewModel(
                 showStartDatePicker = false
             )
         }
-        // If end date is earlier than start date, reset end date
         val end = _uiState.value.endDateMillis
         if (end != null && end < millis) {
             _uiState.update {
@@ -178,7 +249,6 @@ class PermissionViewModel(
         val isReasonValid = reasonLen in 10..500
         val isFormValid = hasDates && datesValid && isReasonValid
 
-        // Submit requires linked student (or preview validation mode for verification)
         val canSubmit = isFormValid && !current.isOffline && (current.selectedStudent != null || current.previewValidationActive)
 
         _uiState.update {
@@ -205,7 +275,7 @@ class PermissionViewModel(
     }
 
     fun confirmSubmit() {
-        _uiState.update { it.copy(showConfirmDialog = false) }
+        _uiState.update { it.copy(showConfirmDialog = false, isSubmitting = true) }
         viewModelScope.launch {
             val current = _uiState.value
             val request = LeaveRequest(
@@ -220,17 +290,18 @@ class PermissionViewModel(
             when (result) {
                 is ApiResult.BackendUnavailable -> {
                     _uiState.update {
-                        it.copy(snackbarMessage = result.message)
+                        it.copy(isSubmitting = false, snackbarMessage = result.message)
                     }
                 }
                 is ApiResult.Error -> {
                     _uiState.update {
-                        it.copy(snackbarMessage = result.message)
+                        it.copy(isSubmitting = false, snackbarMessage = result.message)
                     }
                 }
                 is ApiResult.Success -> {
                     _uiState.update {
                         it.copy(
+                            isSubmitting = false,
                             snackbarMessage = "Pengajuan izin berhasil dikirim.",
                             leaveHistory = listOf(result.data) + it.leaveHistory,
                             reason = "",
@@ -238,10 +309,16 @@ class PermissionViewModel(
                             endDateText = "",
                             startDateMillis = null,
                             endDateMillis = null,
-                            selectedType = LeaveType.PERMISSION
+                            selectedType = LeaveType.SICK,
+                            attachment = null,
+                            reasonError = null,
+                            dateError = null,
+                            isFormValid = false,
+                            canSubmit = false
                         )
                     }
-                    loadLeaveHistory(current.selectedStudent?.id)
+                    ensurePendingPolling(_uiState.value.leaveHistory)
+                    loadLeaveHistory(current.selectedStudent?.id, silent = true)
                 }
                 ApiResult.Loading -> Unit
             }
@@ -250,6 +327,15 @@ class PermissionViewModel(
 
     fun clearSnackbarMessage() {
         _uiState.update { it.copy(snackbarMessage = null) }
+    }
+
+    /**
+     * Public refresh for pull-to-refresh on history screen.
+     * Triggers a silent refresh of leave history.
+     */
+    fun refreshHistory() {
+        val studentId = _uiState.value.selectedStudent?.id ?: return
+        loadLeaveHistory(studentId, silent = true)
     }
 
     class Factory(

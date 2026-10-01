@@ -1,7 +1,9 @@
 package id.tandara.parent.ui.settings
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,13 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.School
@@ -36,18 +35,23 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.tandara.parent.R
+import id.tandara.parent.BuildConfig
 import id.tandara.parent.core.designsystem.AccentBlue
 import id.tandara.parent.core.designsystem.AppBackground
 import id.tandara.parent.core.designsystem.BorderColor
@@ -116,7 +120,7 @@ fun AboutScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "Tandara",
+                        text = "Tandara Parent",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryText
@@ -125,9 +129,10 @@ fun AboutScreen(
                     Spacer(modifier = Modifier.height(3.dp))
 
                     Text(
-                        text = "Pantau Langkah, Dukung Masa Depan",
+                        text = "Pantau kehadiran, izin, dan informasi sekolah dalam satu aplikasi.",
                         fontSize = 13.sp,
-                        color = SecondaryText
+                        color = SecondaryText,
+                        textAlign = TextAlign.Center
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -139,7 +144,7 @@ fun AboutScreen(
                             .padding(horizontal = 14.dp, vertical = 5.dp)
                     ) {
                         Text(
-                            text = "Versi 2.0.0 • Build 2026.09",
+                            text = "Versi ${BuildConfig.VERSION_NAME}",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = PrimaryText
@@ -157,49 +162,48 @@ fun AboutScreen(
                     .clip(RoundedCornerShape(16.dp))
                     .background(PrimarySurface)
                     .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
-                    .padding(18.dp)
+                    .padding(16.dp)
             ) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .background(SecondarySurface, CircleShape)
-                                .border(1.dp, AccentBlue, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
+                    Image(
+                        painter = painterResource(R.drawable.kenascan),
+                        contentDescription = "Logo KenaScan",
+                        modifier = Modifier
+                            .size(58.dp)
+                            .clip(RoundedCornerShape(10.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Dikembangkan oleh",
+                            fontSize = 12.sp,
+                            color = SecondaryText
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "KenaScan Team",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryText
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
                             Icon(
-                                imageVector = Icons.Outlined.Groups,
+                                imageVector = Icons.Outlined.Verified,
                                 contentDescription = null,
                                 tint = AccentBlue,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Tim Pengembang: Kena Scan",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PrimaryText
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    imageVector = Icons.Outlined.Verified,
-                                    contentDescription = null,
-                                    tint = AccentBlue,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            Text(
-                                text = "Innovating Intelligent School Solutions",
-                                fontSize = 12.sp,
-                                color = SecondaryText
-                            )
-                        }
+                        Text(
+                            text = "Innovating Intelligent School Solutions",
+                            fontSize = 12.sp,
+                            color = SecondaryText
+                        )
+                    }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -257,11 +261,14 @@ fun AboutScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Portfolio / Website Action Button
             OutlinedButton(
                 onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://dzarel.com"))
-                    context.startActivity(intent)
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://tandara.id"))
+                    try {
+                        context.startActivity(intent)
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, "Browser tidak tersedia.", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
@@ -279,24 +286,18 @@ fun AboutScreen(
                     modifier = Modifier.padding(vertical = 4.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Code,
+                        imageVector = Icons.Outlined.OpenInNew,
                         contentDescription = null,
                         tint = AccentBlue,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Kunjungi Portofolio & Dokumentasi",
+                        text = "Website Tandara",
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Outlined.OpenInNew,
-                        contentDescription = null,
-                        tint = AccentBlue,
-                        modifier = Modifier.size(16.dp)
-                    )
                 }
             }
 

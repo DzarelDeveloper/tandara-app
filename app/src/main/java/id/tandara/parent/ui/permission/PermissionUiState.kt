@@ -23,9 +23,13 @@ data class PermissionUiState(
     val showConfirmDialog: Boolean = false,
     val isFormValid: Boolean = false,
     val canSubmit: Boolean = false, // true only if student linked & form valid
+    val isSubmitting: Boolean = false,
     val snackbarMessage: String? = null,
     val previewValidationActive: Boolean = false,
     val isLoading: Boolean = false,
     val isOffline: Boolean = false,
     val lastUpdatedAt: Long? = null
-)
+) {
+    val recentHistory: List<LeaveRequest>
+        get() = leaveHistory.take(3)
+}

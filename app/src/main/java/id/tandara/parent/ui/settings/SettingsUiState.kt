@@ -4,6 +4,8 @@ import id.tandara.parent.domain.model.Parent
 
 data class SettingsUiState(
     val currentParent: Parent? = null,
+    val parentPhotoUrl: String? = null,
+    val isUploadingPhoto: Boolean = false,
     val username: String = "",
     val maskedPhoneNumber: String = "",
     val appearance: String = "light", // "light", "dark", "system"

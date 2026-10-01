@@ -44,6 +44,23 @@ class ReportsViewModel(
         viewModelScope.launch {
             realtimeCoordinator.refreshEvents.collect { loadData() }
         }
+        viewModelScope.launch {
+            realtimeCoordinator.events.collect { event ->
+                val studentId = _uiState.value.currentStudent?.id ?: return@collect
+                val studentMatches = event.notification.relatedStudentId == null ||
+                        event.notification.relatedStudentId == studentId
+                if (!studentMatches) return@collect
+                when (event.type) {
+                    "STUDENT_CHECK_IN",
+                    "STUDENT_CHECK_OUT",
+                    "ATTENDANCE_CORRECTED",
+                    "LEAVE_APPROVED",
+                    "LEAVE_REJECTED" -> {
+                        loadData()
+                    }
+                }
+            }
+        }
         loadData()
     }
 

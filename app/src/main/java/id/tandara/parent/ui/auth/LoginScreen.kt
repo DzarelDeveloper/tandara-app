@@ -2,6 +2,7 @@ package id.tandara.parent.ui.auth
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,19 +26,26 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -54,14 +63,15 @@ import id.tandara.parent.core.designsystem.PrimaryBlue
 import id.tandara.parent.core.designsystem.PrimarySurface
 import id.tandara.parent.core.designsystem.PrimaryText
 import id.tandara.parent.core.designsystem.SecondaryText
+import id.tandara.parent.core.designsystem.SuccessGreen
+import id.tandara.parent.core.designsystem.SurfaceWhite
+import id.tandara.parent.core.network.ServerConfig
 import id.tandara.parent.ui.components.TandaraButton
 import id.tandara.parent.ui.components.TandaraLogo
+import id.tandara.parent.ui.components.TandaraOutlinedButton
 import id.tandara.parent.ui.components.TandaraTextField
+import kotlinx.coroutines.delay
 
-/**
- * Login Screen (UI/UX V3 - Dark Navy Identity).
- * Establishes Tandara's dark navy + royal blue layered visual identity.
- */
 @Composable
 fun LoginScreen(
     viewModel: LoginViewModel,
@@ -70,10 +80,20 @@ fun LoginScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
             onLoginSuccess()
+        }
+    }
+
+    LaunchedEffect(uiState.serverChangeNoticeMessage) {
+        val message = uiState.serverChangeNoticeMessage
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            delay(4000)
+            viewModel.clearServerChangeNotice()
         }
     }
 
@@ -112,6 +132,139 @@ fun LoginScreen(
         )
     }
 
+    if (uiState.showServerSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissServerSettingsDialog() },
+            title = {
+                Text(
+                    text = "Pengaturan Server",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PrimaryText
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TandaraTextField(
+                        value = uiState.serverHostInput,
+                        onValueChange = viewModel::onServerHostChanged,
+                        label = "Alamat Server",
+                        placeholder = "contoh: 192.168.110.101",
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        ),
+                        errorMessage = uiState.serverHostError,
+                        testTag = "input_server_host"
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    TandaraTextField(
+                        value = uiState.serverPortInput,
+                        onValueChange = viewModel::onServerPortChanged,
+                        label = "Port",
+                        placeholder = "contoh: 8000",
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = { focusManager.clearFocus() }
+                        ),
+                        errorMessage = uiState.serverPortError,
+                        testTag = "input_server_port"
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (uiState.serverHostInput.isNotBlank()) {
+                        val portDisplay = uiState.serverPortInput.trim().ifBlank { ServerConfig.DEFAULT_PORT.toString() }
+                        Text(
+                            text = "Endpoint: http://${uiState.serverHostInput.trim()}:$portDisplay",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SecondaryText,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    when (uiState.serverConnectionTestState) {
+                        ConnectionTestState.TESTING -> {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                LinearProgressIndicator(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = PrimaryBlue,
+                                    trackColor = PrimarySurface
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = uiState.serverConnectionTestMessage ?: "Memeriksa koneksi...",
+                                    color = SecondaryText,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        ConnectionTestState.SUCCESS -> {
+                            Text(
+                                text = uiState.serverConnectionTestMessage ?: "✓ Server Tandara terhubung",
+                                color = SuccessGreen,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        ConnectionTestState.FAILURE -> {
+                            Text(
+                                text = uiState.serverConnectionTestMessage ?: "Tidak dapat terhubung ke server.",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        ConnectionTestState.IDLE -> Unit
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.dismissServerSettingsDialog() }
+                ) {
+                    Text(text = "Batal", color = SecondaryText)
+                }
+            },
+            confirmButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TandaraOutlinedButton(
+                        onClick = viewModel::testConnection,
+                        enabled = uiState.serverConnectionTestState != ConnectionTestState.TESTING && !uiState.serverSaveLoading,
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Text(text = "Tes Koneksi", fontSize = 13.sp)
+                    }
+                    TandaraButton(
+                        onClick = viewModel::saveServer,
+                        isLoading = uiState.serverSaveLoading,
+                        enabled = uiState.serverConnectionTestState != ConnectionTestState.TESTING,
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Text(text = "Simpan", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            },
+            containerColor = PrimarySurface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -128,12 +281,19 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Tandara Logo
-            TandaraLogo(size = 64.dp)
+            Box(
+                modifier = Modifier.pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { /* single tap no-op */ },
+                        onDoubleTap = { viewModel.onLogoDoubleTap() }
+                    )
+                }
+            ) {
+                TandaraLogo(size = 64.dp)
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // App Brand Name & Subtitle
             Text(
                 text = "Tandara",
                 fontSize = 28.sp,
@@ -152,7 +312,6 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Elevated Login Surface Container
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -162,7 +321,6 @@ fun LoginScreen(
                     .padding(22.dp)
             ) {
                 Column {
-                    // Username / Nomor Identitas
                     TandaraTextField(
                         value = uiState.phoneNumber,
                         onValueChange = viewModel::onPhoneNumberChanged,
@@ -187,7 +345,6 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Password Field with show/hide toggle
                     TandaraTextField(
                         value = uiState.password,
                         onValueChange = viewModel::onPasswordChanged,
@@ -239,7 +396,6 @@ fun LoginScreen(
                         testTag = "input_password"
                     )
 
-                    // Forgot password button
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -261,7 +417,6 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(18.dp))
 
-                    // Primary 'Masuk' Button
                     TandaraButton(
                         onClick = {
                             focusManager.clearFocus()
@@ -277,13 +432,11 @@ fun LoginScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
-
                 }
             }
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Minimal Footer Text
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -301,6 +454,21 @@ fun LoginScreen(
                     textAlign = TextAlign.Center
                 )
             }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
+        ) { snackbarData ->
+            Snackbar(
+                snackbarData = snackbarData,
+                containerColor = PrimarySurface,
+                contentColor = PrimaryText,
+                actionColor = AccentBlue,
+                shape = RoundedCornerShape(12.dp)
+            )
         }
     }
 }

@@ -7,6 +7,9 @@ import id.tandara.parent.core.common.PhoneUtils
 import id.tandara.parent.core.network.ApiResult
 import id.tandara.parent.data.session.SessionManager
 import id.tandara.parent.domain.repository.AuthRepository
+import id.tandara.parent.domain.repository.ParentRepository
+import id.tandara.parent.core.network.NetworkConfigManager
+import android.net.Uri
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,7 +18,9 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val authRepository: AuthRepository,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val parentRepository: ParentRepository,
+    private val networkConfigManager: NetworkConfigManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -37,9 +42,28 @@ class SettingsViewModel(
                 _uiState.update {
                     it.copy(
                         currentParent = parent,
-                        maskedPhoneNumber = masked
+                        maskedPhoneNumber = masked,
+                        parentPhotoUrl = parent?.photoUrl?.let(::absoluteMediaUrl)
                     )
                 }
+            }
+        }
+    }
+
+    private fun absoluteMediaUrl(value: String): String = if (value.startsWith("http")) value
+        else networkConfigManager.baseHttpUrl.trimEnd('/') + "/" + value.trimStart('/')
+
+    fun updateProfilePhoto(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUploadingPhoto = true) }
+            when (val result = parentRepository.updateParentPhoto(uri)) {
+                is ApiResult.Success -> {
+                    _uiState.update { it.copy(parentPhotoUrl = absoluteMediaUrl(result.data), isUploadingPhoto = false, snackbarMessage = "Foto profil diperbarui.") }
+                    authRepository.validateSession()
+                }
+                is ApiResult.Error -> _uiState.update { it.copy(isUploadingPhoto = false, snackbarMessage = result.message) }
+                is ApiResult.BackendUnavailable -> _uiState.update { it.copy(isUploadingPhoto = false, snackbarMessage = result.message) }
+                ApiResult.Loading -> Unit
             }
         }
     }
@@ -169,11 +193,13 @@ class SettingsViewModel(
 
     class Factory(
         private val authRepository: AuthRepository,
-        private val sessionManager: SessionManager
+        private val sessionManager: SessionManager,
+        private val parentRepository: ParentRepository,
+        private val networkConfigManager: NetworkConfigManager
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SettingsViewModel(authRepository, sessionManager) as T
+            return SettingsViewModel(authRepository, sessionManager, parentRepository, networkConfigManager) as T
         }
     }
 }

@@ -25,6 +25,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.CircularProgressIndicator
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +64,9 @@ fun ParentProfileScreen(
     val colors = TandaraTheme.colors
     val initials = uiState.currentParent?.name?.trim()?.split(Regex("\\s+"))
         ?.take(2)?.mapNotNull { it.firstOrNull()?.uppercase() }?.joinToString("")?.ifBlank { "?" } ?: "?"
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let(viewModel::updateProfilePhoto)
+    }
 
     BackHandler { onBackClick() }
 
@@ -97,18 +108,27 @@ fun ParentProfileScreen(
                             .size(72.dp)
                             .clip(CircleShape)
                             .background(colors.surfaceSubtle)
-                            .border(2.dp, colors.primary, CircleShape),
+                            .border(2.dp, colors.primary, CircleShape)
+                            .clickable(enabled = !uiState.isUploadingPhoto) {
+                                photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = initials,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.primary
-                        )
+                        if (uiState.parentPhotoUrl != null) {
+                            AsyncImage(model = uiState.parentPhotoUrl, contentDescription = "Foto profil orang tua", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        } else Text(text = initials, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                        if (uiState.isUploadingPhoto) CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.dp)
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(modifier = Modifier.clickable(enabled = !uiState.isUploadingPhoto) { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.CameraAlt, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ubah foto profil", style = MaterialTheme.typography.labelMedium, color = colors.primary)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
                         text = uiState.currentParent?.name ?: "Memuat profil...",

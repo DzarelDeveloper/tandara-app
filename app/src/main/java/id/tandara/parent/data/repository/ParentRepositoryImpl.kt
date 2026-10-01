@@ -1,8 +1,10 @@
 package id.tandara.parent.data.repository
 
+import android.net.Uri
+import id.tandara.parent.TandaraApplication
 import id.tandara.parent.core.network.ApiResult
 import id.tandara.parent.core.network.NetworkDiagnostics
-import id.tandara.parent.data.remote.ParentApiService
+import id.tandara.parent.data.remote.ApiClient
 import id.tandara.parent.data.local.LocalCacheStore
 import id.tandara.parent.data.remote.dto.NotificationDto
 import id.tandara.parent.data.session.SessionStore
@@ -11,16 +13,34 @@ import id.tandara.parent.domain.model.Student
 import id.tandara.parent.domain.repository.ParentRepository
 import kotlinx.coroutines.flow.first
 import java.io.IOException
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
-/**
- * Implementation of ParentRepository.
- * Strictly resolves exactly ONE assigned student for the authenticated parent.
- */
 class ParentRepositoryImpl(
     private val sessionManager: SessionStore,
-    private val api: ParentApiService,
+    private val apiClient: ApiClient,
     private val cache: LocalCacheStore
 ) : ParentRepository {
+
+    override suspend fun updateParentPhoto(uri: Uri): ApiResult<String> {
+        return try {
+            val resolver = TandaraApplication.instance.contentResolver
+            val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: return ApiResult.Error("Gambar tidak dapat dibaca.")
+            val mime = resolver.getType(uri) ?: "application/octet-stream"
+            val response = apiClient.parentApiService.updateProfilePhoto(
+                MultipartBody.Part.createFormData("image", "profile", bytes.toRequestBody(mime.toMediaTypeOrNull()))
+            )
+            if (!response.isSuccessful) return apiError(response.code(), response.errorBody()?.string())
+            ApiResult.Success(response.body()?.data?.photoUrl ?: return ApiResult.Error("Respons foto profil tidak valid."))
+        } catch (error: IOException) {
+            ApiResult.BackendUnavailable("Tidak dapat mengunggah foto ke server Tandara.")
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("POST /api/parent/profile/photo", error)
+            ApiResult.Error("Gagal memperbarui foto profil.")
+        }
+    }
 
     private suspend fun accountId(): String = sessionManager.sessionFlow.first().let { it.parentId.ifBlank { it.username } }
 
@@ -31,7 +51,7 @@ class ParentRepositoryImpl(
     }
 
     private suspend fun assignedStudent(): Student? = sessionManager.sessionFlow.first().let { session ->
-        if (session.studentId.isBlank()) null else Student(session.studentId, session.studentNis, session.studentName, session.studentClass)
+        if (session.studentId.isBlank()) null else Student(session.studentId, session.studentNis, session.studentName, session.studentClass, session.studentPhotoUrl.ifBlank { null })
     }
 
     override suspend fun getAssignedStudent(): ApiResult<Student> {
@@ -51,6 +71,7 @@ class ParentRepositoryImpl(
     }
 
     override suspend fun getNotifications(): ApiResult<List<ParentNotification>> {
+        val api = apiClient.parentApiService
         return try {
             val response = api.getNotifications()
             if (!response.isSuccessful) {
@@ -74,6 +95,7 @@ class ParentRepositoryImpl(
     }
 
     override suspend fun getUnreadNotificationCount(): ApiResult<Int> {
+        val api = apiClient.parentApiService
         return try {
             val response = api.getUnreadNotificationCount()
             if (!response.isSuccessful) {
@@ -95,6 +117,7 @@ class ParentRepositoryImpl(
     }
 
     override suspend fun markNotificationRead(notificationId: String): ApiResult<ParentNotification> {
+        val api = apiClient.parentApiService
         return try {
             val response = api.markNotificationRead(notificationId.toIntOrNull() ?: return ApiResult.Error("ID notifikasi tidak valid."))
             if (!response.isSuccessful) {
@@ -115,6 +138,7 @@ class ParentRepositoryImpl(
     }
 
     override suspend fun markAllNotificationsRead(): ApiResult<Int> {
+        val api = apiClient.parentApiService
         return try {
             val response = api.markAllNotificationsRead()
             if (!response.isSuccessful) {

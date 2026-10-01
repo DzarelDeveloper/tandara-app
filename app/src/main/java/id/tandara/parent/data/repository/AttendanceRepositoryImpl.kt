@@ -2,7 +2,7 @@ package id.tandara.parent.data.repository
 
 import id.tandara.parent.core.network.ApiResult
 import id.tandara.parent.core.network.NetworkDiagnostics
-import id.tandara.parent.data.remote.AttendanceApiService
+import id.tandara.parent.data.remote.ApiClient
 import id.tandara.parent.data.local.LocalCacheStore
 import id.tandara.parent.data.session.SessionStore
 import id.tandara.parent.data.remote.dto.ParentStudentAttendanceDto
@@ -18,7 +18,7 @@ import java.util.Locale
 import kotlinx.coroutines.flow.first
 
 class AttendanceRepositoryImpl(
-    private val api: AttendanceApiService,
+    private val apiClient: ApiClient,
     private val sessionManager: SessionStore,
     private val cache: LocalCacheStore
 ) : AttendanceRepository {
@@ -26,6 +26,7 @@ class AttendanceRepositoryImpl(
     private suspend fun accountId() = sessionManager.sessionFlow.first().let { it.parentId.ifBlank { it.username } }
 
     override suspend fun getTodayAttendance(studentId: String): ApiResult<AttendanceRecord?> {
+        val api = apiClient.attendanceApiService
         return try {
             val response = api.getTodayAttendance(studentId)
             if (!response.isSuccessful) {
@@ -79,6 +80,7 @@ class AttendanceRepositoryImpl(
         month: Int,
         year: Int
     ): ApiResult<List<AttendanceRecord>> {
+        val api = apiClient.attendanceApiService
         return try {
             val start = LocalDate.of(year, month, 1)
             val end = start.withDayOfMonth(start.lengthOfMonth())

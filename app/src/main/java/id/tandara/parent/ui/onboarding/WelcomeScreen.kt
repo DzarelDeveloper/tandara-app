@@ -37,7 +37,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -58,7 +58,6 @@ import id.tandara.parent.ui.components.TandaraLogo
 @Composable
 fun WelcomeScreen(
     onStartClick: () -> Unit,
-    onLoginClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -80,29 +79,27 @@ fun WelcomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 1. TOP: Tandara Branding
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 12.dp)
+                modifier = Modifier
+                    .widthIn(max = 420.dp)
+                    .fillMaxWidth()
             ) {
-                TandaraLogo(size = 52.dp)
+                TandaraLogo(size = 56.dp)
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Tandara",
+                    text = "Tandara Parent",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary,
                         letterSpacing = 0.5.sp
                     )
                 )
-
-                Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
                     text = "SMK Taman Harapan",
@@ -113,48 +110,64 @@ fun WelcomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // 2. MIDDLE (approx 40-45% height): Visual Artwork / Connection Storytelling
             WelcomeHeroIllustration(
                 modifier = Modifier
-                    .widthIn(max = 400.dp)
+                    .widthIn(max = 420.dp)
                     .fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // 3. BOTTOM: Welcome Message & Primary/Secondary Actions
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+                horizontalAlignment = Alignment.Start,
                 modifier = Modifier
                     .widthIn(max = 420.dp)
                     .fillMaxWidth()
             ) {
                 Text(
-                    text = "Selamat datang di Tandara",
-                    style = MaterialTheme.typography.headlineSmall.copy(
+                    text = "Pantau aktivitas sekolah anak dengan lebih mudah.",
+                    style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary
                     ),
-                    textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Pantau kehadiran anak dengan lebih mudah, aman, dan terhubung bersama SMK Taman Harapan.",
+                    text = "Terhubung dengan sekolah untuk melihat kehadiran, izin, dan informasi siswa.",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         color = colors.textSecondary,
                         lineHeight = 22.sp
                     ),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 6.dp)
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                // Primary Button: Mulai
+                WelcomeBenefit(
+                    icon = Icons.Default.CheckCircle,
+                    title = "Kehadiran real-time",
+                    description = "Pantau waktu masuk dan pulang siswa.",
+                    iconColor = colors.success
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                WelcomeBenefit(
+                    icon = Icons.Default.Person,
+                    title = "Pengajuan izin",
+                    description = "Ajukan dan pantau status izin langsung.",
+                    iconColor = colors.primary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                WelcomeBenefit(
+                    icon = Icons.Default.School,
+                    title = "Informasi sekolah",
+                    description = "Dapatkan pembaruan penting dari sekolah.",
+                    iconColor = colors.accent
+                )
+
+                Spacer(modifier = Modifier.height(22.dp))
                 TandaraButton(
                     onClick = onStartClick,
                     modifier = Modifier
@@ -168,28 +181,7 @@ fun WelcomeScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Secondary Text Button: Sudah pernah menggunakan Tandara? Masuk
-                TextButton(
-                    onClick = onLoginClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("button_welcome_login")
-                ) {
-                    Text(
-                        text = "Sudah pernah menggunakan Tandara? Masuk",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.primary
-                        )
-                    )
-                }
-
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Text(
                     text = "Akun orang tua/wali disediakan langsung oleh pihak sekolah",
                     style = MaterialTheme.typography.labelSmall.copy(
@@ -198,6 +190,49 @@ fun WelcomeScreen(
                     textAlign = TextAlign.Center
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun WelcomeBenefit(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    iconColor: Color
+) {
+    val colors = TandaraTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(iconColor.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(19.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall.copy(color = colors.textSecondary)
+            )
         }
     }
 }
