@@ -1,6 +1,7 @@
 package id.tandara.parent
 
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -9,14 +10,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import id.tandara.parent.core.common.SystemNotificationManager
 import androidx.compose.ui.Modifier
 import id.tandara.parent.core.designsystem.TandaraTheme
 import id.tandara.parent.core.navigation.TandaraNavHost
 
 open class MainActivity : ComponentActivity() {
+    private var notificationDestination by mutableStateOf<String?>(null)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        notificationDestination = intent.getStringExtra(SystemNotificationManager.EXTRA_DESTINATION)
         val container = (application as TandaraApplication).container
 
         setContent {
@@ -33,10 +39,15 @@ open class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = TandaraTheme.colors.background
                 ) {
-                    TandaraNavHost(container = container)
+                    TandaraNavHost(container = container, notificationDestination = notificationDestination, onNotificationDestinationHandled = { notificationDestination = null })
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        notificationDestination = intent.getStringExtra(SystemNotificationManager.EXTRA_DESTINATION)
     }
 
     override fun onResume() {

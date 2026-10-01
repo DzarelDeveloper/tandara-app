@@ -7,13 +7,21 @@ import id.tandara.parent.data.remote.dto.NotificationReadAllDto
 import id.tandara.parent.data.remote.dto.NotificationUnreadCountDto
 import id.tandara.parent.data.remote.dto.ParentProfileDto
 import id.tandara.parent.data.remote.dto.StudentDto
+import id.tandara.parent.data.remote.dto.ProfilePhotoDto
+import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Multipart
+import retrofit2.http.POST
+import retrofit2.http.Part
 
 interface ParentApiService {
+    @Multipart
+    @POST("api/parent/profile/photo")
+    suspend fun updateProfilePhoto(@Part image: MultipartBody.Part): Response<ApiEnvelope<ProfilePhotoDto>>
     @GET("api/v1/parent/profile")
     suspend fun getProfile(): Response<ParentProfileDto>
 

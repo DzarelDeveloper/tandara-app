@@ -20,6 +20,7 @@ data class LeaveResponseDto(
     @Json(name = "leave_type") val leaveType: String? = null,
     @Json(name = "reason") val reason: String? = null,
     @Json(name = "status") val status: String? = null,
+    @Json(name = "review_note") val reviewNote: String? = null,
     @Json(name = "created_at") val createdAt: String? = null
 )
 

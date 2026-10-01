@@ -113,9 +113,19 @@ class TandaraValidationTest {
         assertEquals(null, emptyAttendance?.id)
 
         val leave = moshi.adapter(LeaveResponseDto::class.java)
-            .fromJson("""{"id":19,"student_id":4,"leave_date":"2026-09-29","status":"PENDING"}""")
+            .fromJson("""{"id":19,"student_id":4,"leave_date":"2026-09-29","status":"APPROVED","reason":"Demam","review_note":"Bukti belum lengkap"}""")
         assertEquals(19L, leave?.id)
         assertEquals(4L, leave?.studentId)
+        assertEquals("Demam", leave?.reason)
+        assertEquals("Bukti belum lengkap", leave?.reviewNote)
+        assertFalse(leave?.reason == leave?.reviewNote)
+        listOf("PENDING", "APPROVED", "REJECTED").forEach { status ->
+            val parsed = moshi.adapter(LeaveResponseDto::class.java).fromJson("""{"id":20,"status":"$status","reason":"Demam","review_note":null}""")
+            assertEquals("Demam", parsed?.reason)
+            assertEquals(null, parsed?.reviewNote)
+        }
+        val blank = moshi.adapter(LeaveResponseDto::class.java).fromJson("""{"id":21,"status":"REJECTED","reason":"Demam","review_note":"   "}""")
+        assertEquals("   ", blank?.reviewNote)
     }
 
     @Test

@@ -1,7 +1,8 @@
 package id.tandara.parent.data.repository
 
 import id.tandara.parent.core.network.ApiResult
-import id.tandara.parent.data.remote.PermissionApiService
+import id.tandara.parent.core.network.NetworkDiagnostics
+import id.tandara.parent.data.remote.ApiClient
 import id.tandara.parent.data.local.LocalCacheStore
 import id.tandara.parent.data.session.SessionStore
 import id.tandara.parent.data.remote.dto.CreateLeaveRequestDto
@@ -13,7 +14,7 @@ import java.io.IOException
 import kotlinx.coroutines.flow.first
 
 class PermissionRepositoryImpl(
-    private val api: PermissionApiService,
+    private val apiClient: ApiClient,
     private val sessionManager: SessionStore,
     private val cache: LocalCacheStore
 ) : PermissionRepository {
@@ -21,6 +22,7 @@ class PermissionRepositoryImpl(
     private suspend fun accountId() = sessionManager.sessionFlow.first().let { it.parentId.ifBlank { it.username } }
 
     override suspend fun submitLeaveRequest(request: LeaveRequest): ApiResult<LeaveRequest> {
+        val api = apiClient.permissionApiService
         return try {
             val response = api.submitLeaveRequest(
                 CreateLeaveRequestDto(
@@ -42,14 +44,17 @@ class PermissionRepositoryImpl(
             val existing = cache.leave(accountId(), request.studentId)?.value.orEmpty()
             cache.putLeave(accountId(), request.studentId, listOf(saved) + existing.filterNot { it.id == saved.id })
             ApiResult.Success(saved)
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("POST /api/parent/leave-requests", error)
             ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("POST /api/parent/leave-requests", error)
             ApiResult.Error("Gagal mengirim pengajuan izin.")
         }
     }
 
     override suspend fun getLeaveHistory(studentId: String): ApiResult<List<LeaveRequest>> {
+        val api = apiClient.permissionApiService
         return try {
             val response = api.getLeaveHistory()
             if (!response.isSuccessful) {
@@ -71,15 +76,18 @@ class PermissionRepositoryImpl(
                     endDate = item.leaveDate ?: "",
                     reason = item.reason ?: "",
                     status = LeaveStatus.fromBackend(item.status),
+                    reviewerNote = item.reviewNote,
                     submittedAt = item.createdAt ?: ""
                 )
             }.distinctBy { it.id }
             cache.putLeave(accountId(), studentId, mapped)
             ApiResult.Success(mapped, lastUpdatedAt = System.currentTimeMillis())
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("GET /api/parent/leave-requests", error)
             cache.leave(accountId(), studentId)?.let { ApiResult.Success(it.value, true, it.fetchedAt) }
                 ?: ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("GET /api/parent/leave-requests", error)
             ApiResult.Error("Gagal memuat riwayat izin.")
         }
     }

@@ -2,7 +2,8 @@ package id.tandara.parent.data.remote
 
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import id.tandara.parent.core.network.NetworkConfig
+import id.tandara.parent.core.network.NetworkConfigManager
+import id.tandara.parent.core.network.NetworkDiagnostics
 import id.tandara.parent.data.session.SessionStore
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -10,7 +11,10 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 
-class ApiClient(sessionManager: SessionStore) {
+open class ApiClient(
+    private val sessionManager: SessionStore,
+    private val networkConfigManager: NetworkConfigManager
+) {
     private val moshi: Moshi by lazy {
         Moshi.Builder()
             .add(KotlinJsonAdapterFactory())
@@ -32,31 +36,59 @@ class ApiClient(sessionManager: SessionStore) {
                     .header("Authorization", "Bearer $token").build()
                 chain.proceed(request)
             }
+            .addInterceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (!response.isSuccessful) {
+                    NetworkDiagnostics.logHttpStatus(
+                        chain.request().method,
+                        chain.request().url.encodedPath,
+                        response.code
+                    )
+                }
+                response
+            }
             .addInterceptor(loggingInterceptor)
             .build()
     }
 
+    @Volatile private var cachedRetrofitKey: String? = null
+    @Volatile private var cachedRetrofit: Retrofit? = null
+
     private fun getRetrofit(): Retrofit {
-        return Retrofit.Builder()
-            .baseUrl(NetworkConfig.baseUrl)
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
+        val key = networkConfigManager.activeConfig.value.normalizedKey()
+        val current = cachedRetrofit
+        if (current != null && cachedRetrofitKey == key) return current
+        synchronized(this) {
+            val secondCheck = cachedRetrofit
+            val secondKey = cachedRetrofitKey
+            if (secondCheck != null && secondKey == key) return secondCheck
+            val fresh = Retrofit.Builder()
+                .baseUrl(networkConfigManager.baseHttpUrl)
+                .client(okHttpClient)
+                .addConverterFactory(MoshiConverterFactory.create(moshi))
+                .build()
+            cachedRetrofit = fresh
+            cachedRetrofitKey = key
+            return fresh
+        }
     }
 
-    val authApiService: AuthApiService by lazy {
-        getRetrofit().create(AuthApiService::class.java)
+    fun invalidateServices() {
+        synchronized(this) {
+            cachedRetrofit = null
+            cachedRetrofitKey = null
+        }
     }
 
-    val parentApiService: ParentApiService by lazy {
-        getRetrofit().create(ParentApiService::class.java)
-    }
+    open val authApiService: AuthApiService
+        get() = getRetrofit().create(AuthApiService::class.java)
 
-    val attendanceApiService: AttendanceApiService by lazy {
-        getRetrofit().create(AttendanceApiService::class.java)
-    }
+    open val parentApiService: ParentApiService
+        get() = getRetrofit().create(ParentApiService::class.java)
 
-    val permissionApiService: PermissionApiService by lazy {
-        getRetrofit().create(PermissionApiService::class.java)
-    }
+    open val attendanceApiService: AttendanceApiService
+        get() = getRetrofit().create(AttendanceApiService::class.java)
+
+    open val permissionApiService: PermissionApiService
+        get() = getRetrofit().create(PermissionApiService::class.java)
 }

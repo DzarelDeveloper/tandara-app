@@ -29,6 +29,7 @@ import id.tandara.parent.ui.home.HomeScreen
 import id.tandara.parent.ui.home.HomeViewModel
 import id.tandara.parent.ui.onboarding.OnboardingScreen
 import id.tandara.parent.ui.onboarding.WelcomeScreen
+import id.tandara.parent.ui.permission.PermissionHistoryScreen
 import id.tandara.parent.ui.permission.PermissionScreen
 import id.tandara.parent.ui.permission.PermissionViewModel
 import id.tandara.parent.ui.reports.ReportsScreen
@@ -42,10 +43,17 @@ import id.tandara.parent.ui.settings.SettingsScreen
 import id.tandara.parent.ui.settings.SettingsViewModel
 import id.tandara.parent.ui.splash.SplashScreen
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.LaunchedEffect
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Build
+import android.Manifest
 
 @Composable
 fun TandaraNavHost(
     container: AppContainer,
+    notificationDestination: String? = null,
+    onNotificationDestinationHandled: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
@@ -54,9 +62,15 @@ fun TandaraNavHost(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // Double-tap back press handler on root destination (Home)
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val isHomeRoot = currentRoute == Screen.Home.route
+    LaunchedEffect(notificationDestination, currentRoute) {
+        if (notificationDestination != null && currentRoute in listOf(Screen.Home.route, Screen.Reports.route, Screen.Permission.route, Screen.Settings.route)) {
+            navController.navigate(notificationDestination) { launchSingleTop = true }
+            onNotificationDestinationHandled()
+        }
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     BackHandler(enabled = isHomeRoot) {
         val currentTime = System.currentTimeMillis()
@@ -68,13 +82,11 @@ fun TandaraNavHost(
         }
     }
 
-    // Direct exit on Welcome or Login when they serve as the root entry screen
     val isEntryExitScreen = currentRoute == Screen.Welcome.route || currentRoute == Screen.Login.route
     BackHandler(enabled = isEntryExitScreen) {
         (context as? Activity)?.finish()
     }
 
-    // Determine whether to show bottom navigation (Only on Home, Reports, Permission, Settings)
     val showBottomBar = currentRoute in listOf(
         Screen.Home.route,
         Screen.Reports.route,
@@ -107,7 +119,6 @@ fun TandaraNavHost(
             startDestination = Screen.Splash.route,
             modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
         ) {
-            // Cold Launch Splash Screen
             composable(Screen.Splash.route) {
                 SplashScreen(
                     sessionManager = container.sessionManager,
@@ -120,29 +131,22 @@ fun TandaraNavHost(
                 )
             }
 
-            // First-Run Welcome Screen
             composable(Screen.Welcome.route) {
                 WelcomeScreen(
                     onStartClick = {
-                        navController.navigate(Screen.Onboarding.route)
-                    },
-                    onLoginClick = {
-                        // User chose "Sudah punya akun? Masuk"
                         coroutineScope.launch {
                             container.sessionManager.setOnboardingCompleted()
-                        }
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(Screen.Welcome.route) { inclusive = true }
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo(Screen.Welcome.route) { inclusive = true }
+                            }
                         }
                     }
                 )
             }
 
-            // 3-Page Onboarding Screen
             composable(Screen.Onboarding.route) {
                 OnboardingScreen(
                     onFinishOnboarding = {
-                        // User completed onboarding or clicked "Lewati"
                         coroutineScope.launch {
                             container.sessionManager.setOnboardingCompleted()
                         }
@@ -156,14 +160,19 @@ fun TandaraNavHost(
                 )
             }
 
-            // Login Screen
             composable(Screen.Login.route) {
                 val loginVm: LoginViewModel = viewModel(
-                    factory = LoginViewModel.Factory(container.authRepository)
+                    factory = LoginViewModel.Factory(
+                        container.authRepository,
+                        container.networkConfigManager
+                    )
                 )
                 LoginScreen(
                     viewModel = loginVm,
                     onLoginSuccess = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !container.notificationPermissionManager.hasNotificationPermission()) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Login.route) { inclusive = true }
                         }
@@ -171,7 +180,6 @@ fun TandaraNavHost(
                 )
             }
 
-            // Home Screen
             composable(Screen.Home.route) {
                 val homeVm: HomeViewModel = viewModel(
                     factory = HomeViewModel.Factory(
@@ -207,7 +215,6 @@ fun TandaraNavHost(
                 )
             }
 
-            // Reports Screen
             composable(Screen.Reports.route) {
                 val reportsVm: ReportsViewModel = viewModel(
                     factory = ReportsViewModel.Factory(
@@ -219,7 +226,6 @@ fun TandaraNavHost(
                 ReportsScreen(viewModel = reportsVm)
             }
 
-            // Permission / Leave Request Screen
             composable(Screen.Permission.route) {
                 val permissionVm: PermissionViewModel = viewModel(
                     factory = PermissionViewModel.Factory(
@@ -228,15 +234,33 @@ fun TandaraNavHost(
                         container.parentRealtimeCoordinator
                     )
                 )
-                PermissionScreen(viewModel = permissionVm)
+                PermissionScreen(
+                    viewModel = permissionVm,
+                    onViewAllHistory = { navController.navigate(Screen.PermissionHistory.route) }
+                )
             }
 
-            // Settings Screen
+            composable(Screen.PermissionHistory.route) {
+                val permissionVm: PermissionViewModel = viewModel(
+                    factory = PermissionViewModel.Factory(
+                        container.parentRepository,
+                        container.permissionRepository,
+                        container.parentRealtimeCoordinator
+                    )
+                )
+                PermissionHistoryScreen(
+                    viewModel = permissionVm,
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
             composable(Screen.Settings.route) {
                 val settingsVm: SettingsViewModel = viewModel(
                     factory = SettingsViewModel.Factory(
                         container.authRepository,
-                        container.sessionManager
+                        container.sessionManager,
+                        container.parentRepository,
+                        container.networkConfigManager
                     )
                 )
                 SettingsScreen(
@@ -264,12 +288,13 @@ fun TandaraNavHost(
                 )
             }
 
-            // Read-Only Parent Profile Screen
             composable(Screen.Profile.route) {
                 val settingsVm: SettingsViewModel = viewModel(
                     factory = SettingsViewModel.Factory(
                         container.authRepository,
-                        container.sessionManager
+                        container.sessionManager,
+                        container.parentRepository,
+                        container.networkConfigManager
                     )
                 )
                 ParentProfileScreen(
@@ -278,7 +303,6 @@ fun TandaraNavHost(
                 )
             }
 
-            // Sub-destinations
             composable(Screen.Privacy.route) {
                 PrivacyScreen(
                     onBackClick = { navController.popBackStack() }

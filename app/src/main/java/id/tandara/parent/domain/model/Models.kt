@@ -7,7 +7,8 @@ data class Parent(
     val name: String,
     val phoneNumber: String,
     val role: String = "Orang Tua/Wali",
-    val email: String? = null
+    val email: String? = null,
+    val photoUrl: String? = null
 )
 
 data class Student(
@@ -94,6 +95,7 @@ data class LeaveRequest(
     val reason: String,
     val attachment: LeaveAttachment? = null,
     val status: LeaveStatus = LeaveStatus.PENDING,
+    val reviewerNote: String? = null,
     val submittedAt: String = ""
 )
 

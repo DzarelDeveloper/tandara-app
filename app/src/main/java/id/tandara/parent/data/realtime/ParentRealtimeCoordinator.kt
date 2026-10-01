@@ -4,24 +4,29 @@ import android.net.Uri
 import android.util.Log
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import id.tandara.parent.core.network.NetworkConfig
-import id.tandara.parent.core.network.NetworkMonitor
 import id.tandara.parent.core.network.ApiResult
+import id.tandara.parent.core.network.NetworkConfigManager
+import id.tandara.parent.core.network.NetworkDiagnostics
+import id.tandara.parent.core.network.NetworkMonitor
 import id.tandara.parent.data.remote.dto.NotificationDto
 import id.tandara.parent.data.session.SessionStore
 import id.tandara.parent.domain.model.ParentNotification
 import id.tandara.parent.domain.repository.AuthRepository
 import id.tandara.parent.domain.repository.ParentRepository
+import id.tandara.parent.core.common.SystemNotificationManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
@@ -42,7 +47,9 @@ class ParentRealtimeCoordinator(
     private val sessionManager: SessionStore,
     private val authRepository: AuthRepository,
     private val parentRepository: ParentRepository,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val networkConfigManager: NetworkConfigManager,
+    private val systemNotificationManager: SystemNotificationManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val okHttpClient = OkHttpClient.Builder()
@@ -69,11 +76,21 @@ class ParentRealtimeCoordinator(
     private var reconnectDelayMs = 1000L
     private var activeToken: String? = null
     @Volatile private var reconnectScheduled = false
-    @Volatile private var appForeground = false
+    private val _appForeground = MutableStateFlow(false)
+    val isAppForeground: StateFlow<Boolean> = _appForeground.asStateFlow()
+    private val appForeground: Boolean
+        get() = _appForeground.value
 
     fun start() {
         if (isListening) return
         isListening = true
+        scope.launch {
+            networkConfigManager.serverChangedEvents.collect {
+                authFailure = false
+                disconnectSocket()
+                activeToken = null
+            }
+        }
         scope.launch {
             sessionManager.sessionFlow.collect { session ->
                 val token = sessionManager.getAccessToken()
@@ -84,7 +101,7 @@ class ParentRealtimeCoordinator(
                     return@collect
                 }
 
-                if (authFailure || !appForeground) return@collect
+                if (authFailure) return@collect
                 if (token != activeToken || socket == null) {
                     activeToken = token
                     connect(token)
@@ -96,7 +113,7 @@ class ParentRealtimeCoordinator(
                 if (!connected) {
                     reconnectScheduled = false
                     disconnectSocket()
-                } else if (appForeground) {
+                } else {
                     onAppForeground()
                 }
             }
@@ -104,7 +121,7 @@ class ParentRealtimeCoordinator(
     }
 
     fun onAppForeground() {
-        appForeground = true
+        _appForeground.value = true
         scope.launch {
             val token = sessionManager.getAccessToken() ?: return@launch
             val session = sessionManager.sessionFlow.first()
@@ -117,9 +134,7 @@ class ParentRealtimeCoordinator(
     }
 
     fun onAppBackground() {
-        appForeground = false
-        reconnectScheduled = false
-        disconnectSocket()
+        _appForeground.value = false
     }
 
     @Synchronized
@@ -145,9 +160,10 @@ class ParentRealtimeCoordinator(
     }
 
     private fun buildWebSocketUrl(token: String): String {
-        val normalized = NetworkConfig.baseUrl.trimEnd('/')
+        val baseUrl = networkConfigManager.baseHttpUrl
+        val normalized = baseUrl.trimEnd('/')
         val host = normalized.removePrefix("http://").removePrefix("https://")
-        val wsScheme = if (NetworkConfig.baseUrl.startsWith("https://")) "wss" else "ws"
+        val wsScheme = if (baseUrl.startsWith("https://")) "wss" else "ws"
         return "$wsScheme://$host/ws/parent?token=${Uri.encode(token)}"
     }
 
@@ -171,7 +187,7 @@ class ParentRealtimeCoordinator(
     }
 
     private fun scheduleReconnect() {
-        if (authFailure || reconnectScheduled || !appForeground || !networkMonitor.isConnected.value) return
+        if (authFailure || reconnectScheduled || !networkMonitor.isConnected.value) return
         reconnectScheduled = true
         val delayMs = reconnectDelayMs.coerceAtMost(30_000L)
         reconnectDelayMs = (reconnectDelayMs * 2).coerceAtMost(30_000L)
@@ -193,7 +209,9 @@ class ParentRealtimeCoordinator(
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            val payload = runCatching { eventAdapter.fromJson(text) }.getOrNull() ?: return
+            val payload = runCatching { eventAdapter.fromJson(text) }
+                .onFailure { NetworkDiagnostics.logFailure("WebSocket /ws/parent", it) }
+                .getOrNull() ?: return
             val notificationDto = payload.notification ?: return
             val notification = ParentNotification(
                 id = notificationDto.id.toString(),
@@ -208,6 +226,7 @@ class ParentRealtimeCoordinator(
             val eventType = payload.type ?: notificationDto.type ?: "UNKNOWN_EVENT"
             if (eventType == "UNKNOWN_EVENT") return
             _events.tryEmit(ParentRealtimeEvent(type = eventType, notification = notification))
+            systemNotificationManager.show(eventType, notification)
             scope.launch {
                 parentRepository.cacheRealtimeNotification(notification)
                 parentRepository.getNotifications()
@@ -230,6 +249,11 @@ class ParentRealtimeCoordinator(
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) {
             if (socket === webSocket) socket = null
+            if (response != null) {
+                NetworkDiagnostics.logHttpStatus("GET", "/ws/parent", response.code)
+            } else {
+                NetworkDiagnostics.logFailure("WebSocket /ws/parent", t)
+            }
             if (response?.code in setOf(401, 403)) {
                 authFailure = true
                 scope.launch { sessionManager.clearSession() }

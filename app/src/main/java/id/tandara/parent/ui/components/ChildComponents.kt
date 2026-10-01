@@ -45,6 +45,10 @@ import id.tandara.parent.core.designsystem.SecondaryText
 import id.tandara.parent.core.designsystem.SuccessGreen
 import id.tandara.parent.core.designsystem.SuccessGreenBg
 import id.tandara.parent.domain.model.Student
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import id.tandara.parent.TandaraApplication
 
 /**
  * Permanent Student Identity Card for Tandara Parent App.
@@ -57,6 +61,8 @@ fun PermanentStudentIdentityCard(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val photoUrl = student?.photoUrl?.let { if (it.startsWith("http")) it else (context.applicationContext as TandaraApplication).container.networkConfigManager.baseHttpUrl.trimEnd('/') + "/" + it.trimStart('/') }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -81,7 +87,7 @@ fun PermanentStudentIdentityCard(
                     .border(1.5.dp, BorderColor, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
+                if (photoUrl != null) AsyncImage(model = photoUrl, contentDescription = "Foto siswa", modifier = Modifier.size(44.dp).clip(CircleShape), contentScale = ContentScale.Crop) else Icon(
                     imageVector = Icons.Outlined.Person,
                     contentDescription = null,
                     tint = SecondaryText,
@@ -144,6 +150,8 @@ fun ChildDetailBottomSheet(
     onDismiss: () -> Unit
 ) {
     if (student == null) return
+    val context = LocalContext.current
+    val photoUrl = student.photoUrl?.let { if (it.startsWith("http")) it else (context.applicationContext as TandaraApplication).container.networkConfigManager.baseHttpUrl.trimEnd('/') + "/" + it.trimStart('/') }
     val sheetState = rememberModalBottomSheetState()
 
     ModalBottomSheet(
@@ -185,7 +193,7 @@ fun ChildDetailBottomSheet(
                     .border(2.dp, BorderColor, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
+                if (photoUrl != null) AsyncImage(model = photoUrl, contentDescription = "Foto siswa", modifier = Modifier.size(80.dp).clip(CircleShape), contentScale = ContentScale.Crop) else Icon(
                     imageVector = Icons.Outlined.Person,
                     contentDescription = null,
                     tint = SecondaryText,

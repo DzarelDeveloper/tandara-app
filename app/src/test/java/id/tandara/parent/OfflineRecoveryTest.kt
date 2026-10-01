@@ -2,25 +2,43 @@ package id.tandara.parent
 
 import android.content.Context
 import android.app.Application
+import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
+import id.tandara.parent.core.common.SystemNotificationManager
 import id.tandara.parent.core.network.ApiResult
+import id.tandara.parent.core.network.NetworkConfigManager
 import id.tandara.parent.core.network.NetworkMonitor
+import id.tandara.parent.core.network.ServerConfig
 import id.tandara.parent.data.local.CacheDao
 import id.tandara.parent.data.local.CacheEntry
 import id.tandara.parent.data.local.LocalCacheStore
 import id.tandara.parent.data.realtime.ParentRealtimeCoordinator
+import id.tandara.parent.data.remote.ApiClient
 import id.tandara.parent.data.remote.AttendanceApiService
 import id.tandara.parent.data.remote.AuthApiService
+import id.tandara.parent.data.remote.ParentApiService
+import id.tandara.parent.data.remote.PermissionApiService
 import id.tandara.parent.data.remote.dto.ApiEnvelope
 import id.tandara.parent.data.remote.dto.ChangePasswordRequestDto
 import id.tandara.parent.data.remote.dto.HealthDto
+import id.tandara.parent.data.remote.dto.LeaveCreateResultDto
+import id.tandara.parent.data.remote.dto.LeaveResponseDto
 import id.tandara.parent.data.remote.dto.LoginRequestDto
 import id.tandara.parent.data.remote.dto.LoginResponseDto
+import id.tandara.parent.data.remote.dto.NotificationDto
+import id.tandara.parent.data.remote.dto.NotificationReadAllDto
+import id.tandara.parent.data.remote.dto.NotificationUnreadCountDto
 import id.tandara.parent.data.remote.dto.ParentAttendanceHistoryDto
+import id.tandara.parent.data.remote.dto.ParentNotificationsPageDto
+import id.tandara.parent.data.remote.dto.ParentProfileDto
 import id.tandara.parent.data.remote.dto.ParentSessionDto
 import id.tandara.parent.data.remote.dto.ParentStudentAttendanceDto
+import id.tandara.parent.data.remote.dto.ProfilePhotoDto
+import id.tandara.parent.data.remote.dto.StudentDto
+import id.tandara.parent.data.remote.dto.UploadAttachmentResponseDto
 import id.tandara.parent.data.repository.AttendanceRepositoryImpl
 import id.tandara.parent.data.repository.AuthRepositoryImpl
+import id.tandara.parent.data.server.ServerConfigStore
 import id.tandara.parent.data.session.SessionStore
 import id.tandara.parent.data.session.SessionUser
 import id.tandara.parent.domain.model.AttendanceRecord
@@ -38,11 +56,13 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import okhttp3.MultipartBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -89,9 +109,9 @@ class OfflineRecoveryTest {
         var token: String? = "test-token-never-logged"
         var cleared = false
         override fun getAccessToken() = token
-        override suspend fun saveSession(accessToken: String, parentId: String, displayName: String, phoneNumber: String, username: String, role: String, studentId: String, studentName: String, studentNis: String, studentClass: String) {
+        override suspend fun saveSession(accessToken: String, parentId: String, displayName: String, phoneNumber: String, username: String, role: String, studentId: String, studentName: String, studentNis: String, studentClass: String, parentPhotoUrl: String, studentPhotoUrl: String) {
             token = accessToken
-            state.value = SessionUser(true, displayName, phoneNumber, username, role, parentId, studentId, studentName, studentNis, studentClass)
+            state.value = SessionUser(true, displayName, phoneNumber, username, role, parentId, studentId, studentName, studentNis, studentClass, parentPhotoUrl, studentPhotoUrl)
             cleared = false
         }
         override suspend fun clearSession() {
@@ -99,6 +119,19 @@ class OfflineRecoveryTest {
             state.value = SessionUser()
             cleared = true
         }
+    }
+
+    private class MemoryServerConfigStore(
+        initial: ServerConfig = ServerConfig("127.0.0.1", 8000)
+    ) : ServerConfigStore {
+        private val stored = MutableStateFlow(initial)
+        override val configFlow: Flow<ServerConfig> = stored
+        override suspend fun getCurrent(): ServerConfig = stored.value
+        override suspend fun save(config: ServerConfig) { stored.value = config }
+    }
+
+    private fun testNetworkConfigManager(): NetworkConfigManager {
+        return NetworkConfigManager(MemoryServerConfigStore())
     }
 
     private class FailingAuthApi : AuthApiService {
@@ -136,6 +169,48 @@ class OfflineRecoveryTest {
         }
     }
 
+    private class FakeParentApi : ParentApiService {
+        override suspend fun updateProfilePhoto(image: MultipartBody.Part): Response<ApiEnvelope<ProfilePhotoDto>> = error("Not used")
+        override suspend fun getProfile(): Response<ParentProfileDto> = error("Not used")
+        override suspend fun getLinkedStudents(): Response<List<StudentDto>> = error("Not used")
+        override suspend fun getNotifications(
+            page: Int,
+            pageSize: Int,
+            unreadOnly: Boolean
+        ): Response<ApiEnvelope<ParentNotificationsPageDto>> = error("Not used")
+        override suspend fun getUnreadNotificationCount(): Response<ApiEnvelope<NotificationUnreadCountDto>> = error("Not used")
+        override suspend fun markNotificationRead(notificationId: Int): Response<ApiEnvelope<NotificationDto>> = error("Not used")
+        override suspend fun markAllNotificationsRead(): Response<ApiEnvelope<NotificationReadAllDto>> = error("Not used")
+    }
+
+    private class FakePermissionApi : PermissionApiService {
+        override suspend fun getLeaveHistory(): Response<ApiEnvelope<List<LeaveResponseDto>>> = error("Not used")
+        override suspend fun submitLeaveRequest(
+            request: id.tandara.parent.data.remote.dto.CreateLeaveRequestDto
+        ): Response<ApiEnvelope<LeaveCreateResultDto>> = error("Not used")
+        override suspend fun uploadAttachment(file: MultipartBody.Part): Response<UploadAttachmentResponseDto> = error("Not used")
+    }
+
+    private fun authApiClient(session: SessionStore, authApi: AuthApiService): ApiClient {
+        val ncm = testNetworkConfigManager()
+        return object : ApiClient(session, ncm) {
+            override val authApiService: AuthApiService = authApi
+            override val parentApiService: ParentApiService = FakeParentApi()
+            override val attendanceApiService: AttendanceApiService = TestAttendanceApi()
+            override val permissionApiService: PermissionApiService = FakePermissionApi()
+        }
+    }
+
+    private fun attendanceApiClient(session: SessionStore, attendanceApi: AttendanceApiService): ApiClient {
+        val ncm = testNetworkConfigManager()
+        return object : ApiClient(session, ncm) {
+            override val authApiService: AuthApiService = FailingAuthApi()
+            override val parentApiService: ParentApiService = FakeParentApi()
+            override val attendanceApiService: AttendanceApiService = attendanceApi
+            override val permissionApiService: PermissionApiService = FakePermissionApi()
+        }
+    }
+
     private class TestParentRepository : ParentRepository {
         override suspend fun getAssignedStudent() = ApiResult.Success(Student("student-4", "nis-4", "Alya", "7A"))
         override suspend fun getLinkedStudents() = ApiResult.Success(listOf(Student("student-4", "nis-4", "Alya", "7A")))
@@ -144,6 +219,7 @@ class OfflineRecoveryTest {
         override suspend fun markNotificationRead(notificationId: String): ApiResult<ParentNotification> = error("Not used")
         override suspend fun markAllNotificationsRead(): ApiResult<Int> = error("Not used")
         override suspend fun cacheRealtimeNotification(notification: ParentNotification) = Unit
+        override suspend fun updateParentPhoto(uri: Uri): ApiResult<String> = error("Not used")
     }
 
     private class TestAttendanceRepository(
@@ -157,7 +233,7 @@ class OfflineRecoveryTest {
     @Test
     fun temporaryValidationFailurePreservesValidParentSession() = runTest {
         val session = TestSessionStore()
-        val repository = AuthRepositoryImpl(session, FailingAuthApi(), LocalCacheStore(MemoryDao()))
+        val repository = AuthRepositoryImpl(session, authApiClient(session, FailingAuthApi()), LocalCacheStore(MemoryDao()))
 
         val result = repository.validateSession()
 
@@ -170,10 +246,10 @@ class OfflineRecoveryTest {
     }
 
     private suspend fun apiResponsePreservesSession(session: TestSessionStore) {
-        val api = FailingAuthApi().apply {
+        val failingApi = FailingAuthApi().apply {
             sessionResponse = Response.error(503, "{}".toResponseBody())
         }
-        val result = AuthRepositoryImpl(session, api, LocalCacheStore(MemoryDao())).validateSession()
+        val result = AuthRepositoryImpl(session, authApiClient(session, failingApi), LocalCacheStore(MemoryDao())).validateSession()
         assertTrue(result is ApiResult.BackendUnavailable)
         assertTrue(session.sessionFlow.first().isAuthenticated)
         assertFalse(session.cleared)
@@ -182,10 +258,10 @@ class OfflineRecoveryTest {
     @Test
     fun actualUnauthorizedResponseClearsParentSession() = runTest {
         val session = TestSessionStore()
-        val api = FailingAuthApi().apply {
+        val failingApi = FailingAuthApi().apply {
             sessionResponse = Response.error(401, "{}".toResponseBody())
         }
-        val repository = AuthRepositoryImpl(session, api, LocalCacheStore(MemoryDao()))
+        val repository = AuthRepositoryImpl(session, authApiClient(session, failingApi), LocalCacheStore(MemoryDao()))
 
         val result = repository.validateSession()
 
@@ -199,14 +275,14 @@ class OfflineRecoveryTest {
         val session = TestSessionStore()
         val dao = MemoryDao()
         val cache = LocalCacheStore(dao)
-        val api = TestAttendanceApi()
-        val repository = AttendanceRepositoryImpl(api, session, cache)
+        val attendanceApi = TestAttendanceApi()
+        val repository = AttendanceRepositoryImpl(attendanceApiClient(session, attendanceApi), session, cache)
         val month = LocalDate.now()
         val period = "%04d-%02d".format(month.year, month.monthValue)
         val stale = AttendanceRecord("old-1", "01 Sep 2026", status = AttendanceStatus.PRESENT)
         cache.putReports("parent-12", "student-4", period, listOf(stale))
 
-        api.historyFailure = IOException("backend unavailable")
+        attendanceApi.historyFailure = IOException("backend unavailable")
         val offline = repository.getMonthlyAttendanceRecords("student-4", month.monthValue, month.year)
         assertTrue(offline is ApiResult.Success && offline.isStale)
         assertEquals(listOf(stale), (offline as ApiResult.Success).data)
@@ -216,8 +292,8 @@ class OfflineRecoveryTest {
             date = month.withDayOfMonth(2).toString(),
             status = "LATE"
         )
-        api.historyFailure = null
-        api.history = Response.success(
+        attendanceApi.historyFailure = null
+        attendanceApi.history = Response.success(
             ApiEnvelope(success = true, data = ParentAttendanceHistoryDto(items = listOf(current, current)))
         )
         repeat(2) {
@@ -236,8 +312,8 @@ class OfflineRecoveryTest {
     fun successfulEmptyTodayClearsCacheAndYesterdayIsNotToday() = runTest {
         val session = TestSessionStore()
         val cache = LocalCacheStore(MemoryDao())
-        val api = TestAttendanceApi()
-        val repository = AttendanceRepositoryImpl(api, session, cache)
+        val attendanceApi = TestAttendanceApi()
+        val repository = AttendanceRepositoryImpl(attendanceApiClient(session, attendanceApi), session, cache)
         val today = LocalDate.now()
         val yesterday = today.minusDays(1)
         val yesterdayRecord = AttendanceRecord("yesterday", "${yesterday}", status = AttendanceStatus.PRESENT)
@@ -263,11 +339,16 @@ class OfflineRecoveryTest {
             val parentRepository = TestParentRepository()
             val record = AttendanceRecord("cached-1", "29 Sep 2026", status = AttendanceStatus.PRESENT)
             val reports = TestAttendanceRepository(ApiResult.Success(listOf(record), isStale = true, lastUpdatedAt = 1234L))
+            val ncm = testNetworkConfigManager()
+            val authApi = authApiClient(session, FailingAuthApi())
+            val authRepository = AuthRepositoryImpl(session, authApi, LocalCacheStore(MemoryDao()))
             val coordinator = ParentRealtimeCoordinator(
                 session,
-                AuthRepositoryImpl(session, FailingAuthApi(), LocalCacheStore(MemoryDao())),
+                authRepository,
                 parentRepository,
-                NetworkMonitor(context)
+                NetworkMonitor(context),
+                ncm,
+                SystemNotificationManager(context)
             )
             val viewModel = ReportsViewModel(parentRepository, reports, coordinator)
 

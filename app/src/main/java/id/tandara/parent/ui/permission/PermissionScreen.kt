@@ -19,11 +19,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.CalendarToday
@@ -31,7 +34,6 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DatePickerDefaults
@@ -50,9 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,11 +63,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.tandara.parent.core.common.DateUtils
 import id.tandara.parent.core.designsystem.AccentBlue
 import id.tandara.parent.core.designsystem.AppBackground
 import id.tandara.parent.core.designsystem.BorderColor
 import id.tandara.parent.core.designsystem.DividerColor
-import id.tandara.parent.core.designsystem.ElevatedSurface
 import id.tandara.parent.core.designsystem.ErrorRed
 import id.tandara.parent.core.designsystem.PrimaryBlue
 import id.tandara.parent.core.designsystem.PrimaryBlueLight
@@ -79,29 +79,31 @@ import id.tandara.parent.core.designsystem.SuccessGreen
 import id.tandara.parent.core.designsystem.SuccessGreenBg
 import id.tandara.parent.core.designsystem.WarningAmber
 import id.tandara.parent.core.designsystem.WarningAmberBg
+import id.tandara.parent.domain.model.LeaveRequest
+import id.tandara.parent.domain.model.LeaveStatus
 import id.tandara.parent.domain.model.LeaveType
+import id.tandara.parent.domain.model.Student
 import id.tandara.parent.ui.components.ConfirmationDialog
 import id.tandara.parent.ui.components.ConnectionStateBanner
 import id.tandara.parent.ui.components.TandaraBrandTopAppBar
 import id.tandara.parent.ui.components.TandaraButton
 import id.tandara.parent.ui.components.TandaraOutlinedButton
 import id.tandara.parent.ui.components.TandaraTextField
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
-/**
- * Leave / Izin Screen (UI/UX V3).
- * Redesigned with Dark Navy Layered Interface.
- * STRICT ONE PARENT ACCOUNT = ONE STUDENT (No student selector anywhere).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PermissionScreen(
     viewModel: PermissionViewModel,
+    onViewAllHistory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Riwayat Izin, 1: Formulir Izin
 
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let { msg ->
@@ -110,7 +112,6 @@ fun PermissionScreen(
         }
     }
 
-    // Attachment file picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -118,7 +119,6 @@ fun PermissionScreen(
             var fileName = "lampiran"
             var fileSize = 0L
             val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
-
             context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
@@ -127,7 +127,6 @@ fun PermissionScreen(
                     if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex)
                 }
             }
-
             viewModel.onAttachmentSelected(
                 fileName = fileName,
                 fileType = mimeType,
@@ -137,7 +136,6 @@ fun PermissionScreen(
         }
     }
 
-    // Start Date Picker Dialog
     if (uiState.showStartDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = uiState.startDateMillis ?: System.currentTimeMillis()
@@ -161,9 +159,7 @@ fun PermissionScreen(
                     Text("Batal", color = SecondaryText)
                 }
             },
-            colors = DatePickerDefaults.colors(
-                containerColor = PrimarySurface
-            )
+            colors = DatePickerDefaults.colors(containerColor = PrimarySurface)
         ) {
             DatePicker(
                 state = datePickerState,
@@ -187,7 +183,6 @@ fun PermissionScreen(
         }
     }
 
-    // End Date Picker Dialog
     if (uiState.showEndDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = uiState.endDateMillis ?: (uiState.startDateMillis ?: System.currentTimeMillis())
@@ -211,9 +206,7 @@ fun PermissionScreen(
                     Text("Batal", color = SecondaryText)
                 }
             },
-            colors = DatePickerDefaults.colors(
-                containerColor = PrimarySurface
-            )
+            colors = DatePickerDefaults.colors(containerColor = PrimarySurface)
         ) {
             DatePicker(
                 state = datePickerState,
@@ -237,16 +230,12 @@ fun PermissionScreen(
         }
     }
 
-    // Submission Confirmation Dialog
     if (uiState.showConfirmDialog) {
         ConfirmationDialog(
             title = "Kirim pengajuan izin?",
             message = "Pengajuan izin untuk ${uiState.selectedStudent?.name ?: "Siswa"} akan diperiksa dan diverifikasi oleh guru piket.",
             confirmLabel = "Kirim",
-            onConfirm = {
-                viewModel.confirmSubmit()
-                selectedTab = 0
-            },
+            onConfirm = { viewModel.confirmSubmit() },
             onDismiss = { viewModel.dismissConfirmDialog() },
             testTag = "submit_leave_confirm_dialog"
         )
@@ -276,7 +265,361 @@ fun PermissionScreen(
             ConnectionStateBanner(isOffline = uiState.isOffline, lastUpdatedAt = uiState.lastUpdatedAt)
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Header: Izin & Ketidakhadiran + Student Context (Fixed single student, NO dropdown)
+            // ========================================================
+            // HEADER: Ajukan Izin
+            // ========================================================
+            Text(
+                text = "Ajukan Izin",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = PrimaryText
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Ajukan izin ketidakhadiran anak. Isi informasi berikut untuk dikirim ke sekolah.",
+                fontSize = 13.5.sp,
+                color = SecondaryText,
+                lineHeight = 18.sp
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Siswa info card (No dropdown, strict single student per account)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SecondarySurface)
+                    .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                    .padding(14.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(PrimaryBlueLight)
+                            .border(1.dp, AccentBlue.copy(alpha = 0.4f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = (uiState.selectedStudent?.name?.firstOrNull() ?: "S").toString(),
+                            color = PrimaryBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Siswa",
+                            fontSize = 11.5.sp,
+                            color = SecondaryText
+                        )
+                        Text(
+                            text = uiState.selectedStudent?.name ?: "Memuat data siswa...",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryText
+                        )
+                        Text(
+                            text = uiState.selectedStudent?.className ?: "",
+                            fontSize = 12.5.sp,
+                            color = SecondaryText
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // ========================================================
+            // FORM: Jenis Izin
+            // ========================================================
+            Text(
+                text = "Jenis Izin",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = PrimaryText
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LeaveType.entries.forEach { type ->
+                    val isSelected = uiState.selectedType == type
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) PrimaryBlueLight else PrimarySurface)
+                            .border(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) AccentBlue else BorderColor,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable { viewModel.onTypeSelected(type) }
+                            .padding(vertical = 12.dp)
+                            .testTag("leave_type_${type.name.lowercase()}"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Check,
+                                    contentDescription = null,
+                                    tint = AccentBlue,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                            Text(
+                                text = type.displayName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isSelected) AccentBlue else PrimaryText
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Tanggal
+            Text(
+                text = "Rentang Tanggal",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = PrimaryText
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(PrimarySurface)
+                        .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                        .clickable { viewModel.openStartDatePicker() }
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                        .testTag("picker_start_date")
+                ) {
+                    Column {
+                        Text(text = "Mulai", style = MaterialTheme.typography.labelSmall, color = SecondaryText)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.CalendarToday,
+                                contentDescription = null,
+                                tint = AccentBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = uiState.startDateText.ifEmpty { "Pilih tanggal" },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (uiState.startDateText.isNotEmpty()) PrimaryText else SecondaryText
+                            )
+                        }
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(PrimarySurface)
+                        .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                        .clickable { viewModel.openEndDatePicker() }
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                        .testTag("picker_end_date")
+                ) {
+                    Column {
+                        Text(text = "Sampai", style = MaterialTheme.typography.labelSmall, color = SecondaryText)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.CalendarToday,
+                                contentDescription = null,
+                                tint = AccentBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = uiState.endDateText.ifEmpty { "Pilih tanggal" },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (uiState.endDateText.isNotEmpty()) PrimaryText else SecondaryText
+                            )
+                        }
+                    }
+                }
+            }
+            if (uiState.dateError != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = uiState.dateError!!,
+                    color = ErrorRed,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Alasan
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Alasan",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PrimaryText
+                )
+                Text(
+                    text = "${uiState.reason.length}/500",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (uiState.reason.length > 500) ErrorRed else SecondaryText,
+                    modifier = Modifier.testTag("reason_char_counter")
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            TandaraTextField(
+                value = uiState.reason,
+                onValueChange = viewModel::onReasonChanged,
+                label = "Tulis alasan ketidakhadiran",
+                placeholder = "Jelaskan alasan izin atau kondisi anak (minimal 10 karakter)...",
+                singleLine = false,
+                minLines = 3,
+                maxLines = 5,
+                errorMessage = uiState.reasonError,
+                testTag = "input_reason"
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Lampiran
+            Text(
+                text = "Lampiran (Opsional)",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = PrimaryText
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Format: JPG, PNG, PDF (Maks. 5 MB)",
+                style = MaterialTheme.typography.bodySmall,
+                color = SecondaryText
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            if (uiState.attachment != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(PrimarySurface)
+                        .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                        .testTag("attachment_info_card")
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Description,
+                                contentDescription = null,
+                                tint = AccentBlue,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = uiState.attachment!!.fileName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = PrimaryText,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = uiState.attachment!!.fileType,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = SecondaryText
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = viewModel::removeAttachment,
+                            modifier = Modifier.testTag("button_remove_attachment")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = "Hapus lampiran",
+                                tint = ErrorRed
+                            )
+                        }
+                    }
+                }
+            } else {
+                TandaraOutlinedButton(
+                    onClick = { filePickerLauncher.launch("*/*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "button_select_attachment"
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AttachFile,
+                        contentDescription = null,
+                        tint = AccentBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "Tambah bukti", color = PrimaryText)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(22.dp))
+
+            // Kirim Pengajuan button with loading
+            TandaraButton(
+                onClick = { viewModel.requestSubmit() },
+                enabled = uiState.canSubmit && !uiState.isSubmitting,
+                isLoading = uiState.isSubmitting,
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "button_submit_permission"
+            ) {
+                Text(
+                    text = if (uiState.isSubmitting) "Mengirim..." else "Kirim Pengajuan",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            if (!uiState.canSubmit && !uiState.isSubmitting) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Lengkapi tanggal dan alasan minimal 10 karakter untuk mengirim.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SecondaryText,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // ========================================================
+            // RECENT HISTORY (3 items) + Lihat semua
+            // ========================================================
+            Spacer(modifier = Modifier.height(32.dp))
+            HorizontalDivider(color = DividerColor)
+            Spacer(modifier = Modifier.height(22.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -284,513 +627,119 @@ fun PermissionScreen(
             ) {
                 Column {
                     Text(
-                        text = "Izin & Ketidakhadiran",
-                        fontSize = 22.sp,
+                        text = "Riwayat Pengajuan",
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryText
                     )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "${uiState.selectedStudent?.name ?: "Siswa"} • ${uiState.selectedStudent?.className ?: "Kelas belum ditentukan"}",
-                        fontSize = 13.5.sp,
-                        color = SecondaryText
-                    )
+                    if (uiState.leaveHistory.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Terbaru",
+                            fontSize = 12.sp,
+                            color = SecondaryText
+                        )
+                    }
                 }
-
-                // Primary Button: + Ajukan Izin
-                if (selectedTab == 0) {
+                if (uiState.leaveHistory.isNotEmpty()) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(PrimaryBlue)
-                            .clickable { selectedTab = 1 }
-                            .padding(horizontal = 14.dp, vertical = 9.dp)
-                            .testTag("button_open_leave_form"),
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onViewAllHistory)
+                            .padding(horizontal = 6.dp, vertical = 6.dp)
+                            .testTag("button_lihat_semua"),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Outlined.Add,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Ajukan Izin",
+                                text = "Lihat semua",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                                color = AccentBlue
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = AccentBlue,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Navigation Switcher: Riwayat Pengajuan vs Formulir Pengajuan
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(PrimarySurface, RoundedCornerShape(12.dp))
-                    .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
-                    .padding(4.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(if (selectedTab == 0) SecondarySurface else Color.Transparent)
-                        .clickable { selectedTab = 0 }
-                        .padding(vertical = 10.dp)
-                        .testTag("tab_history_izin"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Riwayat Pengajuan",
-                        fontSize = 13.5.sp,
-                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selectedTab == 0) AccentBlue else SecondaryText
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(if (selectedTab == 1) SecondarySurface else Color.Transparent)
-                        .clickable { selectedTab = 1 }
-                        .padding(vertical = 10.dp)
-                        .testTag("tab_form_izin"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Formulir Baru",
-                        fontSize = 13.5.sp,
-                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selectedTab == 1) AccentBlue else SecondaryText
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            if (selectedTab == 1) {
-                // ========================================================
-                // LEAVE FORM (No Student Selector!)
-                // ========================================================
-
-                // Info banner
+            if (uiState.leaveHistory.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(PrimaryBlueLight)
-                        .border(1.dp, AccentBlue.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                        .padding(14.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = null,
-                            tint = AccentBlue,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Pengajuan izin akan langsung diteruskan kepada guru piket & wali kelas.",
-                            fontSize = 13.sp,
-                            color = PrimaryText
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                // Jenis Ketidakhadiran: [ Izin ] [ Sakit ] [ Lainnya ]
-                Text(
-                    text = "Jenis Ketidakhadiran",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = PrimaryText
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    LeaveType.entries.forEach { type ->
-                        val isSelected = uiState.selectedType == type
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSelected) PrimaryBlueLight else PrimarySurface)
-                                .border(
-                                    width = if (isSelected) 1.5.dp else 1.dp,
-                                    color = if (isSelected) AccentBlue else BorderColor,
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                .clickable { viewModel.onTypeSelected(type) }
-                                .padding(vertical = 12.dp)
-                                .testTag("leave_type_${type.name.lowercase()}"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Check,
-                                        contentDescription = null,
-                                        tint = AccentBlue,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                }
-                                Text(
-                                    text = type.displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (isSelected) AccentBlue else PrimaryText
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Dates: Start Date & End Date Pickers
-                Text(
-                    text = "Rentang Tanggal",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = PrimaryText
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Start Date
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(PrimarySurface)
-                            .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
-                            .clickable { viewModel.openStartDatePicker() }
-                            .padding(horizontal = 12.dp, vertical = 12.dp)
-                            .testTag("picker_start_date")
-                    ) {
-                        Column {
-                            Text(
-                                text = "Mulai",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = SecondaryText
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Outlined.CalendarToday,
-                                    contentDescription = null,
-                                    tint = AccentBlue,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = uiState.startDateText.ifEmpty { "Pilih tanggal" },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (uiState.startDateText.isNotEmpty()) PrimaryText else SecondaryText
-                                )
-                            }
-                        }
-                    }
-
-                    // End Date
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(PrimarySurface)
-                            .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
-                            .clickable { viewModel.openEndDatePicker() }
-                            .padding(horizontal = 12.dp, vertical = 12.dp)
-                            .testTag("picker_end_date")
-                    ) {
-                        Column {
-                            Text(
-                                text = "Sampai",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = SecondaryText
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Outlined.CalendarToday,
-                                    contentDescription = null,
-                                    tint = AccentBlue,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = uiState.endDateText.ifEmpty { "Pilih tanggal" },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (uiState.endDateText.isNotEmpty()) PrimaryText else SecondaryText
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (uiState.dateError != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = uiState.dateError!!,
-                        color = ErrorRed,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Reason Field
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .background(PrimarySurface)
+                        .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                        .padding(vertical = 24.dp, horizontal = 16.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Alasan Ketidakhadiran",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = PrimaryText
-                    )
-                    Text(
-                        text = "${uiState.reason.length}/500",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (uiState.reason.length > 500) ErrorRed else SecondaryText,
-                        modifier = Modifier.testTag("reason_char_counter")
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-
-                TandaraTextField(
-                    value = uiState.reason,
-                    onValueChange = viewModel::onReasonChanged,
-                    label = "Tuliskan keterangan detail",
-                    placeholder = "Jelaskan alasan izin atau kondisi anak (minimal 10 karakter)...",
-                    singleLine = false,
-                    minLines = 3,
-                    maxLines = 5,
-                    errorMessage = uiState.reasonError,
-                    testTag = "input_reason"
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Attachment Section (File Picker)
-                Text(
-                    text = "Lampiran Surat / Bukti (Opsional)",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = PrimaryText
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Format: JPG, PNG, PDF (Maks. 5 MB)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = SecondaryText
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (uiState.attachment != null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(PrimarySurface)
-                            .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
-                            .padding(12.dp)
-                            .testTag("attachment_info_card")
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Description,
-                                    contentDescription = null,
-                                    tint = AccentBlue,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = uiState.attachment!!.fileName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        color = PrimaryText,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = uiState.attachment!!.fileType,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = SecondaryText
-                                    )
-                                }
-                            }
-                            IconButton(
-                                onClick = viewModel::removeAttachment,
-                                modifier = Modifier.testTag("button_remove_attachment")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Close,
-                                    contentDescription = "Hapus lampiran",
-                                    tint = ErrorRed
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    TandaraOutlinedButton(
-                        onClick = { filePickerLauncher.launch("*/*") },
-                        modifier = Modifier.fillMaxWidth(),
-                        testTag = "button_select_attachment"
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.AttachFile,
-                            contentDescription = null,
-                            tint = AccentBlue,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "Pilih Dokumen / Foto", color = PrimaryText)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Primary Submit Button
-                TandaraButton(
-                    onClick = { viewModel.requestSubmit() },
-                    enabled = uiState.canSubmit,
-                    modifier = Modifier.fillMaxWidth(),
-                    testTag = "button_submit_permission"
-                ) {
-                    Text(
-                        text = "Kirim Pengajuan",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                if (!uiState.canSubmit) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Lengkapi tanggal dan alasan minimal 10 karakter untuk mengirim.",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = when {
+                            uiState.selectedStudent == null -> "Data siswa belum tersedia."
+                            uiState.leaveHistoryAvailable -> "Belum ada riwayat izin."
+                            else -> "Riwayat izin belum dapat dimuat."
+                        },
                         color = SecondaryText,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
+                        fontSize = 13.5.sp,
+                        textAlign = TextAlign.Center
                     )
                 }
             } else {
-                PermissionHistoryList(
-                    history = uiState.leaveHistory,
-                    selectedStudent = uiState.selectedStudent,
-                    historyAvailable = uiState.leaveHistoryAvailable
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PermissionHistoryList(
-    history: List<id.tandara.parent.domain.model.LeaveRequest>,
-    selectedStudent: id.tandara.parent.domain.model.Student?,
-    historyAvailable: Boolean
-) {
-    if (history.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(PrimarySurface, RoundedCornerShape(12.dp))
-                .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
-                .padding(20.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = when {
-                    selectedStudent == null -> "Data siswa belum tersedia."
-                    historyAvailable -> "Belum ada riwayat izin."
-                    else -> "Riwayat izin belum dapat dimuat."
-                },
-                color = SecondaryText,
-                fontSize = 14.sp
-            )
-        }
-        return
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        history.forEach { request ->
-            val status = request.status.displayName
-            val statusColor = when (request.status) {
-                id.tandara.parent.domain.model.LeaveStatus.APPROVED -> SuccessGreen
-                id.tandara.parent.domain.model.LeaveStatus.REJECTED -> ErrorRed
-                else -> WarningAmber
-            }
-            val statusBg = when (request.status) {
-                id.tandara.parent.domain.model.LeaveStatus.APPROVED -> SuccessGreenBg
-                id.tandara.parent.domain.model.LeaveStatus.REJECTED -> ErrorRed.copy(alpha = 0.08f)
-                else -> WarningAmberBg
-            }
-
-            PermissionHistoryCard(
-                studentName = selectedStudent?.name ?: "Siswa",
-                dateRange = "${request.startDate} • ${request.endDate}",
-                leaveType = request.type.displayName,
-                status = status,
-                statusColor = statusColor,
-                statusBg = statusBg,
-                reason = request.reason,
-                reviewer = when (request.status) {
-                    id.tandara.parent.domain.model.LeaveStatus.APPROVED -> "Disetujui oleh guru piket"
-                    id.tandara.parent.domain.model.LeaveStatus.REJECTED -> "Ditolak oleh guru piket"
-                    else -> "Menunggu verifikasi guru piket"
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    uiState.recentHistory.forEach { request ->
+                        LeaveHistoryCard(
+                            request = request,
+                            student = uiState.selectedStudent
+                        )
+                    }
                 }
-            )
+            }
         }
     }
 }
 
+/**
+ * Reusable permission history card. Status comes from actual model status.
+ * Shows minimal info consistent with available backend fields: type, status, startDate, reason, submittedAt.
+ * No fabricated fields (teacher note, response, etc.) that are not part of LeaveRequest.
+ */
 @Composable
-private fun PermissionHistoryCard(
-    studentName: String,
-    dateRange: String,
-    leaveType: String,
-    status: String,
-    statusColor: Color,
-    statusBg: Color,
-    reason: String,
-    reviewer: String
+fun LeaveHistoryCard(
+    request: LeaveRequest,
+    student: Student?,
+    modifier: Modifier = Modifier
 ) {
+    val status = request.status.displayNameShort
+    val statusColor = when (request.status) {
+        LeaveStatus.APPROVED -> SuccessGreen
+        LeaveStatus.REJECTED -> ErrorRed
+        else -> WarningAmber
+    }
+    val statusBg = when (request.status) {
+        LeaveStatus.APPROVED -> SuccessGreenBg
+        LeaveStatus.REJECTED -> ErrorRed.copy(alpha = 0.08f)
+        else -> WarningAmberBg
+    }
+    val submittedText = request.submittedAt.takeIf { it.isNotBlank() }?.let { formatSubmittedText(it) }
+    val teacherResponse = request.reviewerNote
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() && request.status != LeaveStatus.PENDING }
+
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(PrimarySurface)
             .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
-            .padding(16.dp)
+            .padding(14.dp)
+            .testTag("leave_history_card_${request.id.ifBlank { request.startDate }}")
     ) {
         Column {
             Row(
@@ -798,22 +747,12 @@ private fun PermissionHistoryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = studentName,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryText
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "$leaveType • $dateRange",
-                        fontSize = 12.5.sp,
-                        color = SecondaryText
-                    )
-                }
-
-                // Clear Status Chip: Menunggu / Disetujui / Ditolak
+                Text(
+                    text = request.type.displayName,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PrimaryText
+                )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -837,24 +776,130 @@ private fun PermissionHistoryCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-            HorizontalDivider(color = DividerColor)
-            Spacer(modifier = Modifier.height(10.dp))
-
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "\"$reason\"",
+                text = formatDateRange(request.startDate, request.endDate),
                 fontSize = 13.sp,
-                color = PrimaryText.copy(alpha = 0.9f),
-                lineHeight = 18.sp
+                fontWeight = FontWeight.SemiBold,
+                color = PrimaryText
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            if (student != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "${student.name} • ${student.className}",
+                    fontSize = 12.sp,
+                    color = SecondaryText
+                )
+            }
 
-            Text(
-                text = reviewer,
-                fontSize = 11.5.sp,
-                color = SecondaryText
-            )
+            if (request.reason.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Alasan izin",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SecondaryText
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = request.reason,
+                    fontSize = 12.5.sp,
+                    color = PrimaryText.copy(alpha = 0.9f),
+                    lineHeight = 17.sp,
+                    maxLines = 3
+                )
+            }
+
+            if (teacherResponse != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(SecondarySurface)
+                        .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = if (request.status == LeaveStatus.REJECTED) {
+                            "Alasan dari Guru"
+                        } else {
+                            "Pesan dari Guru"
+                        },
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SecondaryText
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = teacherResponse,
+                        fontSize = 12.5.sp,
+                        color = PrimaryText,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+
+            if (submittedText != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Diajukan • $submittedText",
+                    fontSize = 11.5.sp,
+                    color = SecondaryText
+                )
+            }
         }
     }
+}
+
+private val LeaveStatus.displayNameShort: String
+    get() = when (this) {
+        LeaveStatus.PENDING -> "Menunggu"
+        LeaveStatus.APPROVED -> "Disetujui"
+        LeaveStatus.REJECTED -> "Ditolak"
+    }
+
+private fun formatDateRange(start: String, end: String): String {
+    val localeId = Locale("id", "ID")
+    val apiFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    val outFmt = SimpleDateFormat("dd MMMM yyyy", localeId)
+    val outFmtShort = SimpleDateFormat("dd MMMM yyyy", localeId)
+    return try {
+        val s = apiFmt.parse(start)
+        val e = apiFmt.parse(end)
+        if (s == null || e == null) start
+        else if (s == e) outFmt.format(s)
+        else {
+            val calS = Calendar.getInstance().apply { time = s }
+            val calE = Calendar.getInstance().apply { time = e }
+            if (calS.get(Calendar.MONTH) == calE.get(Calendar.MONTH) &&
+                calS.get(Calendar.YEAR) == calE.get(Calendar.YEAR)
+            ) {
+                "${calS.get(Calendar.DAY_OF_MONTH)}–${calE.get(Calendar.DAY_OF_MONTH)} ${outFmt.format(e).dropWhile { !it.isLetter() }}"
+            } else {
+                "${outFmtShort.format(s)} – ${outFmtShort.format(e)}"
+            }
+        }
+    } catch (_: Exception) {
+        if (start == end) start else "$start – $end"
+    }
+}
+
+private fun formatSubmittedText(createdAt: String): String? {
+    val localeId = Locale("id", "ID")
+    val candidates = listOf(
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US),
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US),
+        SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    )
+    val outDate = SimpleDateFormat("dd MMM", localeId)
+    val outTime = SimpleDateFormat("HH:mm", localeId)
+    for (fmt in candidates) {
+        try {
+            val d: Date = fmt.parse(createdAt) ?: continue
+            return "${outDate.format(d)} · ${outTime.format(d)}"
+        } catch (_: Exception) { /* try next */ }
+    }
+    return null
 }

@@ -68,6 +68,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.tandara.parent.BuildConfig
 import id.tandara.parent.core.designsystem.TandaraTheme
 import id.tandara.parent.ui.components.ConfirmationDialog
 import id.tandara.parent.ui.components.TandaraBrandTopAppBar
@@ -418,7 +419,7 @@ fun SettingsScreen(
                 SettingsNavigationRow(
                     icon = Icons.Outlined.Info,
                     label = "Tentang Tandara",
-                    subtitle = "Versi 3.0 • SMK Taman Harapan",
+                    subtitle = "Versi ${BuildConfig.VERSION_NAME} • SMK Taman Harapan",
                     onClick = onNavigateToAbout,
                     testTag = "settings_row_tentang"
                 )
