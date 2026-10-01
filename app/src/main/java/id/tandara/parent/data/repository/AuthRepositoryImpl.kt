@@ -1,6 +1,7 @@
 package id.tandara.parent.data.repository
 
 import id.tandara.parent.core.network.ApiResult
+import id.tandara.parent.core.network.NetworkDiagnostics
 import id.tandara.parent.data.remote.AuthApiService
 import id.tandara.parent.data.local.LocalCacheStore
 import id.tandara.parent.data.remote.dto.LoginRequestDto
@@ -25,19 +26,38 @@ class AuthRepositoryImpl(private val sessionManager: SessionStore, private val a
         if (username.isBlank() || password.isBlank()) return ApiResult.Error("Username dan kata sandi wajib diisi.")
         return try {
             val health = api.health()
-            if (!health.isSuccessful || health.body()?.data?.status != "ok") return ApiResult.Error("Respons server Tandara tidak valid.", 502)
+            if (!health.isSuccessful || health.body()?.data?.status != "ok") {
+                if (health.isSuccessful) NetworkDiagnostics.logInvalidServerResponse("GET /api/health")
+                return ApiResult.Error("Respons server Tandara tidak valid.", 502)
+            }
             val response = api.login(LoginRequestDto(username.trim(), password))
             if (!response.isSuccessful) return mapError(response.code(), response.errorBody()?.string())
-            val login = response.body()?.data ?: return ApiResult.Error("Respons server Tandara tidak valid.", 502)
+            val login = response.body()?.data ?: run {
+                NetworkDiagnostics.logInvalidServerResponse("POST /api/auth/login")
+                return ApiResult.Error("Respons server Tandara tidak valid.", 502)
+            }
             if (!login.user.isActive) return ApiResult.Error("Akun tidak aktif. Hubungi Admin IT sekolah.", 403)
             if (login.user.role != "PARENT") return ApiResult.Error("Akun ini bukan akun orang tua/wali.", 403)
             val verified = api.parentSession("Bearer ${login.accessToken}")
             if (!verified.isSuccessful) return mapError(verified.code(), verified.errorBody()?.string())
-            saveVerifiedSession(login.accessToken, verified.body()?.data ?: return ApiResult.Error("Respons server Tandara tidak valid.", 502))
-        } catch (_: SocketTimeoutException) { ApiResult.BackendUnavailable("Waktu koneksi ke server Tandara habis.")
-        } catch (_: UnknownHostException) { ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: IOException) { ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) { ApiResult.Error("Terjadi kesalahan saat memproses respons server.") }
+            val session = verified.body()?.data ?: run {
+                NetworkDiagnostics.logInvalidServerResponse("GET /api/parent/session")
+                return ApiResult.Error("Respons server Tandara tidak valid.", 502)
+            }
+            saveVerifiedSession(login.accessToken, session)
+        } catch (error: SocketTimeoutException) {
+            NetworkDiagnostics.logFailure("POST /api/auth/login", error)
+            ApiResult.BackendUnavailable("Waktu koneksi ke server Tandara habis.")
+        } catch (error: UnknownHostException) {
+            NetworkDiagnostics.logFailure("POST /api/auth/login", error)
+            ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("POST /api/auth/login", error)
+            ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("POST /api/auth/login", error)
+            ApiResult.Error("Terjadi kesalahan saat memproses respons server.")
+        }
     }
 
     override suspend fun validateSession(): ApiResult<Parent> {
@@ -55,9 +75,23 @@ class AuthRepositoryImpl(private val sessionManager: SessionStore, private val a
                     return ApiResult.BackendUnavailable("Server Tandara sedang tidak tersedia.")
                 }
                 mapError(code, response.errorBody()?.string())
-            } else saveVerifiedSession(token, response.body()?.data ?: return ApiResult.Error("Respons server Tandara tidak valid.", 502))
-        } catch (_: SocketTimeoutException) { ApiResult.BackendUnavailable("Waktu koneksi ke server Tandara habis.")
-        } catch (_: IOException) { ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.") }
+            } else {
+                val session = response.body()?.data ?: run {
+                    NetworkDiagnostics.logInvalidServerResponse("GET /api/parent/session")
+                    return ApiResult.Error("Respons server Tandara tidak valid.", 502)
+                }
+                saveVerifiedSession(token, session)
+            }
+        } catch (error: SocketTimeoutException) {
+            NetworkDiagnostics.logFailure("GET /api/parent/session", error)
+            ApiResult.BackendUnavailable("Waktu koneksi ke server Tandara habis.")
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("GET /api/parent/session", error)
+            ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("GET /api/parent/session", error)
+            ApiResult.Error("Respons server Tandara tidak valid.", 502)
+        }
     }
 
     private suspend fun saveVerifiedSession(token: String, session: ParentSessionDto): ApiResult<Parent> {

@@ -1,6 +1,7 @@
 package id.tandara.parent.data.repository
 
 import id.tandara.parent.core.network.ApiResult
+import id.tandara.parent.core.network.NetworkDiagnostics
 import id.tandara.parent.data.remote.PermissionApiService
 import id.tandara.parent.data.local.LocalCacheStore
 import id.tandara.parent.data.session.SessionStore
@@ -42,9 +43,11 @@ class PermissionRepositoryImpl(
             val existing = cache.leave(accountId(), request.studentId)?.value.orEmpty()
             cache.putLeave(accountId(), request.studentId, listOf(saved) + existing.filterNot { it.id == saved.id })
             ApiResult.Success(saved)
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("POST /api/parent/leave-requests", error)
             ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("POST /api/parent/leave-requests", error)
             ApiResult.Error("Gagal mengirim pengajuan izin.")
         }
     }
@@ -76,10 +79,12 @@ class PermissionRepositoryImpl(
             }.distinctBy { it.id }
             cache.putLeave(accountId(), studentId, mapped)
             ApiResult.Success(mapped, lastUpdatedAt = System.currentTimeMillis())
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("GET /api/parent/leave-requests", error)
             cache.leave(accountId(), studentId)?.let { ApiResult.Success(it.value, true, it.fetchedAt) }
                 ?: ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("GET /api/parent/leave-requests", error)
             ApiResult.Error("Gagal memuat riwayat izin.")
         }
     }

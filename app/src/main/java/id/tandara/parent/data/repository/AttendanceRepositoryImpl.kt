@@ -1,6 +1,7 @@
 package id.tandara.parent.data.repository
 
 import id.tandara.parent.core.network.ApiResult
+import id.tandara.parent.core.network.NetworkDiagnostics
 import id.tandara.parent.data.remote.AttendanceApiService
 import id.tandara.parent.data.local.LocalCacheStore
 import id.tandara.parent.data.session.SessionStore
@@ -40,11 +41,13 @@ class AttendanceRepositoryImpl(
             val today = LocalDate.now().toString()
             cache.putToday(accountId(), studentId, today, mapped)
             ApiResult.Success(mapped, lastUpdatedAt = System.currentTimeMillis())
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("GET /api/parent/attendance/today", error)
             val cached = cache.today(accountId(), studentId, LocalDate.now().toString())
             cached?.let { ApiResult.Success(it.value, true, it.fetchedAt) }
                 ?: ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("GET /api/parent/attendance/today", error)
             ApiResult.Error("Gagal memuat data presensi hari ini.")
         }
     }
@@ -99,11 +102,13 @@ class AttendanceRepositoryImpl(
             val period = "%04d-%02d".format(year, month)
             cache.putReports(accountId(), studentId, period, mapped)
             ApiResult.Success(mapped, lastUpdatedAt = System.currentTimeMillis())
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("GET /api/parent/attendance/history", error)
             val period = "%04d-%02d".format(year, month)
             cache.reports(accountId(), studentId, period)?.let { ApiResult.Success(it.value, true, it.fetchedAt) }
                 ?: ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("GET /api/parent/attendance/history", error)
             ApiResult.Error("Gagal memuat riwayat presensi siswa.")
         }
     }

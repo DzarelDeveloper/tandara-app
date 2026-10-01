@@ -43,6 +43,11 @@ android {
     debug {
       // Use AGP's standard per-user debug keystore. The AI Studio export referenced
       // a repository-root debug.keystore that was not included in the export.
+      val debugApiUrl = providers.gradleProperty("TANDARA_API_BASE_URL")
+        .orElse(providers.environmentVariable("TANDARA_API_BASE_URL"))
+        .orElse("http://192.168.110.101:8000/")
+        .get()
+      buildConfigField("String", "TANDARA_API_BASE_URL", "\"${debugApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
   }
   compileOptions {

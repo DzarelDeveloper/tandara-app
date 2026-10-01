@@ -2,6 +2,7 @@ package id.tandara.parent.data.remote
 
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import id.tandara.parent.core.network.NetworkDiagnostics
 import id.tandara.parent.core.network.NetworkConfig
 import id.tandara.parent.data.session.SessionStore
 import okhttp3.OkHttpClient
@@ -31,6 +32,17 @@ class ApiClient(sessionManager: SessionStore) {
                 val request = if (token.isNullOrBlank()) chain.request() else chain.request().newBuilder()
                     .header("Authorization", "Bearer $token").build()
                 chain.proceed(request)
+            }
+            .addInterceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (!response.isSuccessful) {
+                    NetworkDiagnostics.logHttpStatus(
+                        chain.request().method,
+                        chain.request().url.encodedPath,
+                        response.code
+                    )
+                }
+                response
             }
             .addInterceptor(loggingInterceptor)
             .build()

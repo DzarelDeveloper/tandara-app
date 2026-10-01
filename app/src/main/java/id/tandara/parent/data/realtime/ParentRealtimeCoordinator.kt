@@ -5,6 +5,7 @@ import android.util.Log
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import id.tandara.parent.core.network.NetworkConfig
+import id.tandara.parent.core.network.NetworkDiagnostics
 import id.tandara.parent.core.network.NetworkMonitor
 import id.tandara.parent.core.network.ApiResult
 import id.tandara.parent.data.remote.dto.NotificationDto
@@ -193,7 +194,9 @@ class ParentRealtimeCoordinator(
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            val payload = runCatching { eventAdapter.fromJson(text) }.getOrNull() ?: return
+            val payload = runCatching { eventAdapter.fromJson(text) }
+                .onFailure { NetworkDiagnostics.logFailure("WebSocket /ws/parent", it) }
+                .getOrNull() ?: return
             val notificationDto = payload.notification ?: return
             val notification = ParentNotification(
                 id = notificationDto.id.toString(),
@@ -230,6 +233,11 @@ class ParentRealtimeCoordinator(
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) {
             if (socket === webSocket) socket = null
+            if (response != null) {
+                NetworkDiagnostics.logHttpStatus("GET", "/ws/parent", response.code)
+            } else {
+                NetworkDiagnostics.logFailure("WebSocket /ws/parent", t)
+            }
             if (response?.code in setOf(401, 403)) {
                 authFailure = true
                 scope.launch { sessionManager.clearSession() }

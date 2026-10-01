@@ -1,6 +1,7 @@
 package id.tandara.parent.data.repository
 
 import id.tandara.parent.core.network.ApiResult
+import id.tandara.parent.core.network.NetworkDiagnostics
 import id.tandara.parent.data.remote.ParentApiService
 import id.tandara.parent.data.local.LocalCacheStore
 import id.tandara.parent.data.remote.dto.NotificationDto
@@ -62,10 +63,12 @@ class ParentRepositoryImpl(
             val items = response.body()?.data?.items.orEmpty().map { it.toParentNotification() }
             cache.putNotifications(accountId(), items)
             ApiResult.Success(items, lastUpdatedAt = System.currentTimeMillis())
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("GET /api/parent/notifications", error)
             cache.notifications(accountId())?.let { ApiResult.Success(it.value, true, it.fetchedAt) }
                 ?: ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("GET /api/parent/notifications", error)
             ApiResult.Error("Gagal memuat notifikasi orang tua.")
         }
     }
@@ -81,10 +84,12 @@ class ParentRepositoryImpl(
                 return error
             }
             ApiResult.Success(response.body()?.data?.count ?: 0)
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("GET /api/parent/notifications/unread-count", error)
             cache.notifications(accountId())?.let { ApiResult.Success(it.value.count { item -> !item.isRead }, true, it.fetchedAt) }
                 ?: ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("GET /api/parent/notifications/unread-count", error)
             ApiResult.Error("Gagal menghitung notifikasi belum dibaca.")
         }
     }
@@ -100,9 +105,11 @@ class ParentRepositoryImpl(
             val current = cache.notifications(accountId())?.value.orEmpty()
             cache.putNotifications(accountId(), listOf(mapped) + current.filterNot { it.id == mapped.id })
             ApiResult.Success(mapped)
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("PATCH /api/parent/notifications", error)
             ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("PATCH /api/parent/notifications", error)
             ApiResult.Error("Gagal menandai notifikasi sebagai dibaca.")
         }
     }
@@ -116,9 +123,11 @@ class ParentRepositoryImpl(
             val updated = response.body()?.data?.updated ?: 0
             cache.notifications(accountId())?.value?.let { values -> cache.putNotifications(accountId(), values.map { it.copy(isRead = true) }) }
             ApiResult.Success(updated)
-        } catch (_: IOException) {
+        } catch (error: IOException) {
+            NetworkDiagnostics.logFailure("PATCH /api/parent/notifications/read-all", error)
             ApiResult.BackendUnavailable("Tidak dapat terhubung ke server Tandara.")
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            NetworkDiagnostics.logFailure("PATCH /api/parent/notifications/read-all", error)
             ApiResult.Error("Gagal menandai semua notifikasi sebagai dibaca.")
         }
     }
